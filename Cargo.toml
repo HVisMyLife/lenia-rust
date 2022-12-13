@@ -1,0 +1,15 @@
+[package]
+name = "game_of_life_ge"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rayon = "^1.6"
+rand = "^0.8.5"
+rand_chacha = "^0.3.1"
+speedy2d = "^1.9.0"
+ndarray = { version = "^0.15.6", features = ["rayon"]}
+fftconvolve = "^0.1.1"
+#ocl-convolution = "^0.3.0"
