@@ -22,14 +22,14 @@ use fftconvolve::{fftconvolve, Mode};
 pub const DISPLAY_RES: (u32, u32) = (1000, 1000); // should be a multiplication of MAP_SIZE
 
 pub const MAP_SIZE: (i32, i32) = (1000, 1000);
-pub const SEED: u64 = 2;
+pub const SEED: u64 = 1;
 
 pub const K_MAX: i32 = 20;             // maximum radius of kernel any
 pub const K_R: i32 = 40;               // radius of kernel no.0
 
 pub const DT: f32 = 10.0;      // % add each cycle
-pub const CENTER: f32 = 24.0;  // % of neighbours full
-pub const WIDTH: f32 = 3.46;   // width
+pub const CENTER: f32 = 19.57;  // % of neighbours full .14
+pub const WIDTH: f32 = 3.00;   // width .03
 
 
 
@@ -48,7 +48,7 @@ pub fn kernel_calc(radius: i32) -> Array2<f32> {
         }
     }
 
-    kernel /= kernel.sum()/10000.0;
+    kernel /= kernel.sum()/1.0;
     kernel
 }
 
@@ -80,17 +80,15 @@ struct MyWindowHandler {
 
 impl MyWindowHandler {
     fn new(seed: u64) -> Self {
-
-        
         
         let bytes = include_bytes!("../font.ttf");
         let font = Font::new(bytes).unwrap();
 
         Self { 
-            g_params: (DT/100.0, CENTER * 100.0, WIDTH*WIDTH*10000.0), // 0-100 neighbourhood
+            g_params: (DT/100.0, CENTER / 100.0, WIDTH*WIDTH/10000.0), // 0-100 neighbourhood
             kernel: kernel_calc(K_R),
 
-            texture_slice: [0;  (4 * MAP_SIZE.1 * MAP_SIZE.0) as usize].to_vec(),
+            texture_slice: [255;  (4 * MAP_SIZE.1 * MAP_SIZE.0) as usize].to_vec(),
             texture_size: Vector2::new(MAP_SIZE.0 as u32, MAP_SIZE.1 as u32),
 
             map: Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize)), 
@@ -103,6 +101,18 @@ impl MyWindowHandler {
             
             font,
         }
+    }
+
+    fn calc_img(&mut self) {
+        // printing alive entities
+        self.texture_slice.par_iter_mut().enumerate().for_each(|(i, x)| {
+            let col = (self.map[[(i/4)%MAP_SIZE.0 as usize, (i/4)/MAP_SIZE.0 as usize]] * 255.0) as i32;
+            
+            if i%4 == 0{ *x = (-(col/4 - 16).pow(2) + 255).clamp(0,255) as u8;}
+            else if i%4 == 1{ *x = (-(col/4 - 32).pow(2) + 255).clamp(0, 255) as u8;}
+            else if i%4 == 2{ *x = (-(col/4 - 48).pow(2) + 255).clamp(0, 255) as u8;}
+            else if i%4 == 3{*x = (col*1024).clamp(0, 255) as u8;}
+        });
     }
 }
 
@@ -123,8 +133,12 @@ impl WindowHandler for MyWindowHandler {
         self.delta = time::Instant::now();
         graphics.clear_screen(Color::from_rgb(0.2, 0.2, 0.2));
 
+
         self.nh_sum = fftconvolve(&self.map, &self.kernel, Mode::Same).unwrap();
 
+        // self.nh_sum.par_iter_mut().for_each(|e| *e = *e as f32);
+
+        // println!("{}", self.nh_sum[[25, 25]]);
 
         Zip::from(&mut self.map)
             .and(&self.nh_sum)
@@ -136,14 +150,8 @@ impl WindowHandler for MyWindowHandler {
             });
 
 
-        // printing alive entities
-        self.texture_slice.par_iter_mut().enumerate().for_each(|(i, x)| {
-            let col = (self.map[[(i/4)%MAP_SIZE.0 as usize, (i/4)/MAP_SIZE.0 as usize]] * 255.0) as u8;
-            if i%4 == 0{*x = col;}
-            //if i%4 == 1{*x = 0;} 
-            else if i%4 == 2{*x = 255 - col;}
-            else if i%4 == 3{*x = (col*2).clamp(0, 255);}
-        });
+        self.calc_img();
+
         
         let img = graphics.create_image_from_raw_pixels(
             speedy2d::image::ImageDataType::RGBA, 
