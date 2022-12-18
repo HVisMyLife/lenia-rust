@@ -11,5 +11,5 @@ rand = "^0.8.5"
 rand_chacha = "^0.3.1"
 speedy2d = "^1.9.0"
 ndarray = { version = "^0.15.6", features = ["rayon"]}
+ndarray-ndimage = "^0.3.0"
 fftconvolve = "^0.1.1"
-#ocl-convolution = "^0.3.0"
