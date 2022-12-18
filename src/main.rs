@@ -20,16 +20,14 @@ use fftconvolve::{fftconvolve, Mode};
 use ndarray_ndimage::{pad, PadMode};
 
 
-
-
-pub const K_R: i32 = 40;               // radius of kernel no.0
+pub const K_R: i32 = 20;               // radius of kernel no.0 20
 pub const K_MAX: i32 = K_R;             // maximum radius of kernel any
 
-pub const DT: f32 = 20.0;      // % add each cycle
-pub const CENTER: f32 = 19.57;  // % of neighbours full .14
-pub const WIDTH: f32 = 3.00;   // width .03
+pub const DT: f32 = 12.0;      // % add each cycle
+pub const CENTER: f32 = 15.00;  // % of neighbours full .14
+pub const WIDTH: f32 = 1.70;   // width .03
 
-pub const MAP_SIZE: (i32, i32) = (1000-2*K_R, 1000-2*K_R);
+pub const MAP_SIZE: (i32, i32) = (1024-2*K_R, 1024-2*K_R); // 1000
 pub const SEED: u64 = 1;
 
 pub const DISPLAY_RES: (u32, u32) = (MAP_SIZE.0 as u32, MAP_SIZE.1 as u32); // should be a multiplication of MAP_SIZE
@@ -40,7 +38,6 @@ pub fn kernel_calc(radius: i32) -> Array2<f32> {
 
     for ny in -radius..=radius {
         let d = f32::sqrt((radius * radius - ny * ny) as f32) as i32;
-        //for nx in -d..=d {
         for nx in -radius..=radius {
             let r = f32::sqrt((nx.pow(2) + ny.pow(2)) as f32);
 
@@ -77,7 +74,6 @@ struct MyWindowHandler {
 
     // font ??? xd wtf
     font: Font,
-    
 }
 
 impl MyWindowHandler {
@@ -113,6 +109,7 @@ impl MyWindowHandler {
             x[0] = (-(col/4 - 16).pow(2) + 255).clamp(0, 255) as u8; // 3-16
             x[1] = (-(col/4 - 32).pow(2) + 255).clamp(0, 255) as u8; // 3-44
             x[2] = (-(col/4 - 48).pow(2) + 255).clamp(0, 255) as u8; // 3-72
+            //x[3] = (col*2).clamp(0, 255) as u8;
             if col > 0 {x[3] = 255;} else {x[3] = 0;}
         });
     }
@@ -129,19 +126,25 @@ impl WindowHandler for MyWindowHandler {
                 self.map[[x as usize, y as usize]] = self.rng.gen_range(0.0..1.0);
             }
         } 
+        self.map_save = pad(&self.map, &[[K_MAX as usize; 2]], PadMode::Wrap);
+        println!("{}, {}", self.map_save.len(), self.kernel.len());
     }
 
     fn on_draw(&mut self, helper: &mut WindowHelper, graphics: &mut Graphics2D){
-        self.delta = time::Instant::now();
         graphics.clear_screen(Color::from_rgb(0.2, 0.2, 0.2));
 
         self.map_save = pad(&self.map, &[[K_MAX as usize; 2]], PadMode::Wrap);
 
+        self.delta = time::Instant::now();
         self.nh_sum = fftconvolve(&self.map_save, &self.kernel, Mode::Same)
             .unwrap()
             .slice(s![K_MAX..MAP_SIZE.0 + K_MAX, K_MAX..MAP_SIZE.1 + K_MAX])
             .to_owned();
-
+        // fps
+        graphics.draw_text(
+            (10.0, 10.0), Color::BLACK, 
+            &self.font.layout_text(&(&self.delta.elapsed().as_millis()).to_string(), 32.0, TextOptions::new())
+        );
         // println!("{}", self.nh_sum[[25, 25]]);
         // println!("{}, {}", self.map.len_of(Axis(0)) - self.nh_sum.len_of(Axis(0)), self.map.len_of(Axis(1)) - self.nh_sum.len_of(Axis(1)));
 
@@ -167,11 +170,7 @@ impl WindowHandler for MyWindowHandler {
 
         graphics.draw_rectangle_image(self.map_rect.clone(), &img);
         
-        // fps
-        graphics.draw_text(
-            (10.0, 10.0), Color::BLACK, 
-            &self.font.layout_text(&(1000 / &self.delta.elapsed().as_millis()).to_string(), 32.0, TextOptions::new())
-        );
+       
 
         helper.request_redraw();
     }
