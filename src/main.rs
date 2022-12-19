@@ -1,5 +1,4 @@
 #![allow(clippy::ptr_arg)]
-use std::f32::consts::E;
 use std::time;
 use rayon::prelude::*;
 use rand::prelude::*;
@@ -20,15 +19,15 @@ use fftconvolve::{fftconvolve, Mode};
 use ndarray_ndimage::{pad, PadMode};
 
 
-pub const K_R: i32 = 20;               // radius of kernel no.0 20
+pub const K_R: i32 = 40;               // radius of kernel no.0 20
 pub const K_MAX: i32 = K_R;             // maximum radius of kernel any
 
 pub const DT: f32 = 12.0;      // % add each cycle
 pub const CENTER: f32 = 15.00;  // % of neighbours full .14
-pub const WIDTH: f32 = 1.70;   // width .03
+pub const WIDTH: f32 = 1.27;   // width .03
 
 pub const MAP_SIZE: (i32, i32) = (1024-2*K_R, 1024-2*K_R); // 1000
-pub const SEED: u64 = 1;
+pub const SEED: u64 = 2;
 
 pub const DISPLAY_RES: (u32, u32) = (MAP_SIZE.0 as u32, MAP_SIZE.1 as u32); // should be a multiplication of MAP_SIZE
 
@@ -39,14 +38,14 @@ pub fn kernel_calc(radius: i32) -> Array2<f32> {
     for ny in -radius..=radius {
         let d = f32::sqrt((radius * radius - ny * ny) as f32) as i32;
         for nx in -radius..=radius {
-            let r = f32::sqrt((nx.pow(2) + ny.pow(2)) as f32);
+            let r = (f32::sqrt((nx.pow(2) + ny.pow(2)) as f32) + 1.0) / radius as f32;
 
             if ny == 0 && nx == 0 || nx < -d || nx > d { kernel[[(nx+radius)as usize, (ny+radius)as usize]] = 0.0;}
-            else {kernel[[(nx+radius)as usize, (ny+radius)as usize]] = E.powf( -(r - (radius as f32*1.0)/2.0).powi(2) / (radius as f32 * 1.0) );}// kernel shape
+            else {kernel[[(nx+radius)as usize, (ny+radius)as usize]] = ( -((r - 0.5)/0.15).powi(2) / 2.0 ).exp();}// kernel shape
         }
     }
 
-    kernel /= kernel.sum()/1.0;
+    kernel /= kernel.sum();
     kernel
 }
 
@@ -83,7 +82,7 @@ impl MyWindowHandler {
         let font = Font::new(bytes).unwrap();
 
         Self { 
-            g_params: (DT/100.0, CENTER / 100.0, WIDTH*WIDTH/10000.0), // 0-100 neighbourhood
+            g_params: (DT/100.0, CENTER / 100.0, WIDTH / 100.0), // 0-100 neighbourhood
             kernel: kernel_calc(K_R),
 
             texture_slice: [255;  (4 * MAP_SIZE.1 * MAP_SIZE.0) as usize].to_vec(),
@@ -127,25 +126,20 @@ impl WindowHandler for MyWindowHandler {
             }
         } 
         self.map_save = pad(&self.map, &[[K_MAX as usize; 2]], PadMode::Wrap);
-        println!("{}, {}", self.map_save.len(), self.kernel.len());
+        //println!("{}, {}", self.map_save.len(), self.kernel.len());
     }
 
     fn on_draw(&mut self, helper: &mut WindowHelper, graphics: &mut Graphics2D){
+        self.delta = time::Instant::now();
         graphics.clear_screen(Color::from_rgb(0.2, 0.2, 0.2));
 
         self.map_save = pad(&self.map, &[[K_MAX as usize; 2]], PadMode::Wrap);
 
-        self.delta = time::Instant::now();
         self.nh_sum = fftconvolve(&self.map_save, &self.kernel, Mode::Same)
             .unwrap()
             .slice(s![K_MAX..MAP_SIZE.0 + K_MAX, K_MAX..MAP_SIZE.1 + K_MAX])
             .to_owned();
-        // fps
-        graphics.draw_text(
-            (10.0, 10.0), Color::BLACK, 
-            &self.font.layout_text(&(&self.delta.elapsed().as_millis()).to_string(), 32.0, TextOptions::new())
-        );
-        // println!("{}", self.nh_sum[[25, 25]]);
+                // println!("{}", self.nh_sum[[25, 25]]);
         // println!("{}, {}", self.map.len_of(Axis(0)) - self.nh_sum.len_of(Axis(0)), self.map.len_of(Axis(1)) - self.nh_sum.len_of(Axis(1)));
 
         Zip::from(&mut self.map)
@@ -153,7 +147,7 @@ impl WindowHandler for MyWindowHandler {
             .par_for_each(|m, &o| {
                 *m = (
                     *m 
-                    + self.g_params.0 * (( -((o-self.g_params.1).powi(2)) / self.g_params.2 ).exp() * 2.0 -1.0)
+                    + self.g_params.0 * (( -((o-self.g_params.1) / self.g_params.2).powi(2) / 2.0 ).exp() * 2.0 -1.0)
                 ).clamp(0.0, 1.0)     // clamping between 0-1: A + dtG(A*K)
             });
 
@@ -170,7 +164,11 @@ impl WindowHandler for MyWindowHandler {
 
         graphics.draw_rectangle_image(self.map_rect.clone(), &img);
         
-       
+        // fps
+        graphics.draw_text(
+            (10.0, 10.0), Color::BLACK, 
+            &self.font.layout_text(&(&self.delta.elapsed().as_millis()).to_string(), 32.0, TextOptions::new())
+        );
 
         helper.request_redraw();
     }
