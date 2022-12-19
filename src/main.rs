@@ -19,17 +19,19 @@ use fftconvolve::{fftconvolve, Mode};
 use ndarray_ndimage::{pad, PadMode};
 
 
-pub const K_R: i32 = 40;               // radius of kernel no.0 20
+pub const K_R: i32 = 60;               // radius of kernel no.0 20
 pub const K_MAX: i32 = K_R;             // maximum radius of kernel any
 
-pub const DT: f32 = 12.0;      // % add each cycle
+pub const DT: f32 = 10.0;      // % add each cycle
 pub const CENTER: f32 = 15.00;  // % of neighbours full .14
-pub const WIDTH: f32 = 1.27;   // width .03
+pub const WIDTH: f32 = 1.42;   // width .03
 
-pub const MAP_SIZE: (i32, i32) = (1024-2*K_R, 1024-2*K_R); // 1000
+// size of map for convolution, it is later padded for warp func, so we have to cut it for now
+pub const MAP_SIZE: (i32, i32) = (1024-2*K_R, 1024-2*K_R);
 pub const SEED: u64 = 2;
 
-pub const DISPLAY_RES: (u32, u32) = (MAP_SIZE.0 as u32, MAP_SIZE.1 as u32); // should be a multiplication of MAP_SIZE
+pub const DISPLAY_SCALE: f32 = 1.0;
+
 
 // calc for kernel matrix values
 pub fn kernel_calc(radius: i32) -> Array2<f32> {
@@ -91,7 +93,7 @@ impl MyWindowHandler {
             map: Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize)), 
             map_save: Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize)),
             
-            map_rect: Rectangle::new(Vector2::new(0.0, 0.0), Vector2::new(DISPLAY_RES.0 as f32, DISPLAY_RES.1 as f32)),
+            map_rect: Rectangle::new(Vector2::new(0.0, 0.0), Vector2::new(MAP_SIZE.0 as f32 * DISPLAY_SCALE, MAP_SIZE.1 as f32 * DISPLAY_SCALE)),
             nh_sum: Array2::<f32>::zeros([0, 0]),
 
             rng: ChaCha8Rng::seed_from_u64(seed),
@@ -133,15 +135,16 @@ impl WindowHandler for MyWindowHandler {
         self.delta = time::Instant::now();
         graphics.clear_screen(Color::from_rgb(0.2, 0.2, 0.2));
 
+        // padding on borders, so convolution will be continous
         self.map_save = pad(&self.map, &[[K_MAX as usize; 2]], PadMode::Wrap);
 
+        // convolving using fft and cutting borders
         self.nh_sum = fftconvolve(&self.map_save, &self.kernel, Mode::Same)
             .unwrap()
             .slice(s![K_MAX..MAP_SIZE.0 + K_MAX, K_MAX..MAP_SIZE.1 + K_MAX])
             .to_owned();
-                // println!("{}", self.nh_sum[[25, 25]]);
-        // println!("{}, {}", self.map.len_of(Axis(0)) - self.nh_sum.len_of(Axis(0)), self.map.len_of(Axis(1)) - self.nh_sum.len_of(Axis(1)));
 
+        // applying growth mapping function
         Zip::from(&mut self.map)
             .and(&self.nh_sum)
             .par_for_each(|m, &o| {
@@ -152,9 +155,10 @@ impl WindowHandler for MyWindowHandler {
             });
 
 
-        // calculate img and draw it
+        // calculating img pixels
         self.calc_img();
 
+        // creating image from pixels
         let img = graphics.create_image_from_raw_pixels(
             speedy2d::image::ImageDataType::RGBA, 
             speedy2d::image::ImageSmoothingMode::Linear, 
@@ -162,12 +166,13 @@ impl WindowHandler for MyWindowHandler {
             &self.texture_slice
         ).unwrap();
 
+        // drawing map
         graphics.draw_rectangle_image(self.map_rect.clone(), &img);
         
-        // fps
+        // ms
         graphics.draw_text(
             (10.0, 10.0), Color::BLACK, 
-            &self.font.layout_text(&(&self.delta.elapsed().as_millis()).to_string(), 32.0, TextOptions::new())
+            &self.font.layout_text(&((self.delta.elapsed().as_millis()).to_string() + "ms"), 32.0, TextOptions::new())
         );
 
         helper.request_redraw();
@@ -175,7 +180,10 @@ impl WindowHandler for MyWindowHandler {
 }
 
 fn main() {
-    let window = Window::new_centered("Lenia", (DISPLAY_RES.0, DISPLAY_RES.1)).unwrap();
+    let window = Window::new_centered(
+        "Lenia", 
+        ((MAP_SIZE.0 as f32 * DISPLAY_SCALE) as u32, (MAP_SIZE.1 as f32 * DISPLAY_SCALE) as u32)
+    ).unwrap();
     window.run_loop(MyWindowHandler::new(SEED));
 }
 
