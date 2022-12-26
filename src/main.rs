@@ -9,7 +9,8 @@ use speedy2d::shape::Rectangle;
 use speedy2d::window::{
     WindowHandler,
     WindowHelper,
-    WindowStartupInfo
+    WindowStartupInfo,
+    VirtualKeyCode
 };
 use speedy2d::{Graphics2D, Window};
 use speedy2d::font::{Font, TextOptions};
@@ -19,16 +20,16 @@ use fftconvolve::{fftconvolve, Mode};
 use ndarray_ndimage::{pad, PadMode};
 
 
-pub const K_R: i32 = 60;               // radius of kernel no.0 20
-pub const K_MAX: i32 = K_R;             // maximum radius of kernel any
+pub const K_R: i32 = 60;            // radius of kernel no.0 20
+pub const K_MAX: i32 = K_R;         // maximum radius of kernel any
 
-pub const DT: f32 = 10.0;      // % add each cycle
+pub const DT: f32 = 10.0;       // % add each cycle
 pub const CENTER: f32 = 15.00;  // % of neighbours full .14
-pub const WIDTH: f32 = 1.42;   // width .03
+pub const WIDTH: f32 = 1.42;    // width .03
 
 // size of map for convolution, it is later padded for warp func, so we have to cut it for now
 pub const MAP_SIZE: (i32, i32) = (1024-2*K_R, 1024-2*K_R);
-pub const SEED: u64 = 2;
+pub const SEED: u64 = 0;
 
 pub const DISPLAY_SCALE: f32 = 1.0;
 
@@ -52,7 +53,7 @@ pub fn kernel_calc(radius: i32) -> Array2<f32> {
 }
 
 
-struct MyWindowHandler {
+struct WinHandler {
     // main lenia parameters
     g_params: (f32,f32,f32), // dt, g-center, g-width ( 0-100 neighbourhood )
     // precalculated kernel values
@@ -73,11 +74,17 @@ struct MyWindowHandler {
     rng: ChaCha8Rng,
     delta: time::Instant,
 
+    // holes
+    holes: Array1<Hole>,
+
+    // input
+    ins: [bool; 4],
+
     // font ??? xd wtf
     font: Font,
 }
 
-impl MyWindowHandler {
+impl WinHandler {
     fn new(seed: u64) -> Self {
         
         let bytes = include_bytes!("../font.ttf");
@@ -94,11 +101,14 @@ impl MyWindowHandler {
             map_save: Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize)),
             
             map_rect: Rectangle::new(Vector2::new(0.0, 0.0), Vector2::new(MAP_SIZE.0 as f32 * DISPLAY_SCALE, MAP_SIZE.1 as f32 * DISPLAY_SCALE)),
-            nh_sum: Array2::<f32>::zeros([0, 0]),
+            nh_sum: Array2::<f32>::zeros([MAP_SIZE.0 as usize + 2*K_R as usize, MAP_SIZE.1 as usize + 2*K_R as usize]),
 
             rng: ChaCha8Rng::seed_from_u64(seed),
             delta: time::Instant::now(),
-            
+
+            holes: arr1(&[Hole::new((300, 300), 50)]),
+            ins: [false; 4],
+
             font,
         }
     }
@@ -114,21 +124,35 @@ impl MyWindowHandler {
             if col > 0 {x[3] = 255;} else {x[3] = 0;}
         });
     }
+    fn mul_holes(&mut self) {
+        self.holes.iter().for_each(|e|{
+            for y in -e.rad..=e.rad{
+                let d = f32::sqrt((e.rad * e.rad - y * y) as f32) as i32;
+                for x in -d..=d{
+                    self.map_save[[e.pos.0+x as usize + K_MAX as usize,e.pos.1+y as usize + K_MAX as usize]] = 1.0;
+                }
+            }
+        });
+    }
+    fn in_handle(&mut self) {
+        if self.ins[0] {self.holes[0].pos.0 -= 5;}
+        if self.ins[1] {self.holes[0].pos.0 += 5;}
+        if self.ins[2] {self.holes[0].pos.1 -= 5;}
+        if self.ins[3] {self.holes[0].pos.1 += 5;}
+    }
 }
 
-impl WindowHandler for MyWindowHandler {
+impl WindowHandler for WinHandler {
     
     fn on_start(&mut self, helper: &mut WindowHelper, _info: WindowStartupInfo){
         helper.set_cursor_visible(true);
         helper.set_resizable(false);
 
-        for y in self.rng.gen_range((MAP_SIZE.1 as f32/2.7) as i32..MAP_SIZE.1/2)..self.rng.gen_range(MAP_SIZE.1/2..(MAP_SIZE.1 as f32/1.8) as i32) {
-            for x in self.rng.gen_range((MAP_SIZE.0 as f32/8.0) as i32..MAP_SIZE.0/2)..self.rng.gen_range(MAP_SIZE.0/2..(MAP_SIZE.0 as f32/1.1) as i32) {
+        for y in self.rng.gen_range((MAP_SIZE.1 as f32/3.0) as i32..MAP_SIZE.1/2)..self.rng.gen_range(MAP_SIZE.1/2..(MAP_SIZE.1 as f32/1.5) as i32) {
+            for x in self.rng.gen_range((MAP_SIZE.0 as f32/10.0) as i32..MAP_SIZE.0/2)..self.rng.gen_range(MAP_SIZE.0/2..(MAP_SIZE.0 as f32/1.1) as i32) {
                 self.map[[x as usize, y as usize]] = self.rng.gen_range(0.0..1.0);
             }
         } 
-        self.map_save = pad(&self.map, &[[K_MAX as usize; 2]], PadMode::Wrap);
-        //println!("{}, {}", self.map_save.len(), self.kernel.len());
     }
 
     fn on_draw(&mut self, helper: &mut WindowHelper, graphics: &mut Graphics2D){
@@ -137,6 +161,10 @@ impl WindowHandler for MyWindowHandler {
 
         // padding on borders, so convolution will be continous
         self.map_save = pad(&self.map, &[[K_MAX as usize; 2]], PadMode::Wrap);
+        
+        // moving first hole
+        self.in_handle();
+        self.mul_holes();
 
         // convolving using fft and cutting borders
         self.nh_sum = fftconvolve(&self.map_save, &self.kernel, Mode::Same)
@@ -177,6 +205,43 @@ impl WindowHandler for MyWindowHandler {
 
         helper.request_redraw();
     }
+    fn on_key_down(
+            &mut self,
+            _helper: &mut WindowHelper<()>,
+            virtual_key_code: Option<VirtualKeyCode>,
+            _scancode: speedy2d::window::KeyScancode
+        ) {
+        if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Left {self.ins[0] = true;}
+        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Right {self.ins[1] = true;}
+        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Up {self.ins[2] = true;}
+        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Down {self.ins[3] = true;}
+        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Q {std::panic!("Zdupydomordyzaur Jeży");}
+
+    }      
+    fn on_key_up(      
+            &mut self,      
+            _helper: &mut WindowHelper<()>,      
+            virtual_key_code: Option<VirtualKeyCode>,
+            _scancode: speedy2d::window::KeyScancode   
+        ) {      
+              
+        if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Left {self.ins[0] = false;}
+        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Right {self.ins[1] = false;}
+        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Up {self.ins[2] = false;}
+        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Down {self.ins[3] = false;}
+    }
+}
+
+#[derive(Clone)]
+struct Hole {
+    pos: (usize, usize),
+    rad: i32,
+}
+
+impl Hole {
+    fn new(pos: (usize, usize), rad : i32) -> Self {
+        Self { pos, rad }
+    }
 }
 
 fn main() {
@@ -184,7 +249,7 @@ fn main() {
         "Lenia", 
         ((MAP_SIZE.0 as f32 * DISPLAY_SCALE) as u32, (MAP_SIZE.1 as f32 * DISPLAY_SCALE) as u32)
     ).unwrap();
-    window.run_loop(MyWindowHandler::new(SEED));
+    window.run_loop(WinHandler::new(SEED));
 }
 
 
