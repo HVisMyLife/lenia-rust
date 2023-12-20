@@ -1,24 +1,9 @@
 #![allow(clippy::ptr_arg)]
-use std::time;
 use rayon::prelude::*;
-use rand::prelude::*;
-use rand_chacha::ChaCha8Rng;
-use speedy2d::color::Color;
-use speedy2d::dimen::Vector2;
-use speedy2d::shape::Rectangle;
-use speedy2d::window::{
-    WindowHandler,
-    WindowHelper,
-    WindowStartupInfo,
-    VirtualKeyCode
-};
-use speedy2d::{Graphics2D, Window};
-use speedy2d::font::{Font, TextOptions};
-use speedy2d::font::TextLayout;
 use ndarray::{prelude::*, Zip};
 use fftconvolve::{fftconvolve, Mode};
 use ndarray_ndimage::{pad, PadMode};
-
+use macroquad::prelude::*;
 
 pub const K_R: i32 = 60;            // radius of kernel no.0 20
 pub const K_MAX: i32 = K_R;         // maximum radius of kernel any
@@ -29,9 +14,10 @@ pub const WIDTH: f32 = 1.42;    // width .03
 
 // size of map for convolution, it is later padded for warp func, so we have to cut it for now
 pub const MAP_SIZE: (i32, i32) = (1024-2*K_R, 1024-2*K_R);
-pub const SEED: u64 = 0;
+pub const SEED: u64 = 2;
 
 pub const DISPLAY_SCALE: f32 = 1.0;
+
 
 
 // calc for kernel matrix values
@@ -53,7 +39,7 @@ pub fn kernel_calc(radius: i32) -> Array2<f32> {
 }
 
 
-struct WinHandler {
+struct Ecosystem {
     // main lenia parameters
     g_params: (f32,f32,f32), // dt, g-center, g-width ( 0-100 neighbourhood )
     // precalculated kernel values
@@ -61,57 +47,40 @@ struct WinHandler {
     
     // texture for drawing states
     texture_slice: Vec<u8>,
-    texture_size: Vector2<u32>,
+    texture_size: [u16; 2],
     
     // main array of states
     map: Array2<f32>,     
     map_save: Array2<f32>,
     
-    map_rect: Rectangle,
     nh_sum: Array2<f32>,
-    
-    // random generator
-    rng: ChaCha8Rng,
-    delta: time::Instant,
-
-    // holes
-    holes: Array1<Hole>,
-
-    // input
-    ins: [bool; 4],
-
-    // font ??? xd wtf
-    font: Font,
 }
 
-impl WinHandler {
-    fn new(seed: u64) -> Self {
-        
-        let bytes = include_bytes!("../font.ttf");
-        let font = Font::new(bytes).unwrap();
+impl Ecosystem {
+    fn new() -> Self {
+        let mut map = Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize));
 
+        for y in rand::gen_range((MAP_SIZE.1 as f32/3.0) as i32, MAP_SIZE.1/2)..rand::gen_range(MAP_SIZE.1/2, (MAP_SIZE.1 as f32/1.5) as i32) {
+            for x in rand::gen_range((MAP_SIZE.0 as f32/10.0) as i32, MAP_SIZE.0/2)..rand::gen_range(MAP_SIZE.0/2, (MAP_SIZE.0 as f32/1.1) as i32) {
+                map[[x as usize, y as usize]] = rand::gen_range(0.0, 1.0);
+            }
+        } 
+
+        
         Self { 
             g_params: (DT/100.0, CENTER / 100.0, WIDTH / 100.0), // 0-100 neighbourhood
             kernel: kernel_calc(K_R),
 
             texture_slice: [255;  (4 * MAP_SIZE.1 * MAP_SIZE.0) as usize].to_vec(),
-            texture_size: Vector2::new(MAP_SIZE.0 as u32, MAP_SIZE.1 as u32),
+            texture_size: [MAP_SIZE.0 as u16, MAP_SIZE.1 as u16],
 
-            map: Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize)), 
+            map, 
             map_save: Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize)),
             
-            map_rect: Rectangle::new(Vector2::new(0.0, 0.0), Vector2::new(MAP_SIZE.0 as f32 * DISPLAY_SCALE, MAP_SIZE.1 as f32 * DISPLAY_SCALE)),
             nh_sum: Array2::<f32>::zeros([MAP_SIZE.0 as usize + 2*K_R as usize, MAP_SIZE.1 as usize + 2*K_R as usize]),
-
-            rng: ChaCha8Rng::seed_from_u64(seed),
-            delta: time::Instant::now(),
-
-            holes: arr1(&[Hole::new((300, 300), 50)]),
-            ins: [false; 4],
-
-            font,
         }
     }
+
 
     fn calc_img(&mut self) {
         self.texture_slice.par_chunks_mut(4).enumerate().for_each(|(i, x)| {
@@ -124,47 +93,13 @@ impl WinHandler {
             if col > 0 {x[3] = 255;} else {x[3] = 0;}
         });
     }
-    fn mul_holes(&mut self) {
-        self.holes.iter().for_each(|e|{
-            for y in -e.rad..=e.rad{
-                let d = f32::sqrt((e.rad * e.rad - y * y) as f32) as i32;
-                for x in -d..=d{
-                    self.map_save[[e.pos.0+x as usize + K_MAX as usize,e.pos.1+y as usize + K_MAX as usize]] = 1.0;
-                }
-            }
-        });
-    }
-    fn in_handle(&mut self) {
-        if self.ins[0] {self.holes[0].pos.0 -= 5;}
-        if self.ins[1] {self.holes[0].pos.0 += 5;}
-        if self.ins[2] {self.holes[0].pos.1 -= 5;}
-        if self.ins[3] {self.holes[0].pos.1 += 5;}
-    }
-}
-
-impl WindowHandler for WinHandler {
-    
-    fn on_start(&mut self, helper: &mut WindowHelper, _info: WindowStartupInfo){
-        helper.set_cursor_visible(true);
-        helper.set_resizable(false);
-
-        for y in self.rng.gen_range((MAP_SIZE.1 as f32/3.0) as i32..MAP_SIZE.1/2)..self.rng.gen_range(MAP_SIZE.1/2..(MAP_SIZE.1 as f32/1.5) as i32) {
-            for x in self.rng.gen_range((MAP_SIZE.0 as f32/10.0) as i32..MAP_SIZE.0/2)..self.rng.gen_range(MAP_SIZE.0/2..(MAP_SIZE.0 as f32/1.1) as i32) {
-                self.map[[x as usize, y as usize]] = self.rng.gen_range(0.0..1.0);
-            }
-        } 
-    }
-
-    fn on_draw(&mut self, helper: &mut WindowHelper, graphics: &mut Graphics2D){
-        self.delta = time::Instant::now();
-        graphics.clear_screen(Color::from_rgb(0.2, 0.2, 0.2));
+   
+    fn on_draw(&mut self){
+        clear_background(Color::from_rgba(24, 24, 24, 255));
 
         // padding on borders, so convolution will be continous
         self.map_save = pad(&self.map, &[[K_MAX as usize; 2]], PadMode::Wrap);
         
-        // moving first hole
-        self.in_handle();
-        self.mul_holes();
 
         // convolving using fft and cutting borders
         self.nh_sum = fftconvolve(&self.map_save, &self.kernel, Mode::Same)
@@ -182,76 +117,36 @@ impl WindowHandler for WinHandler {
                 ).clamp(0.0, 1.0)     // clamping between 0-1: A + dtG(A*K)
             });
 
-
         // calculating img pixels
         self.calc_img();
 
-        // creating image from pixels
-        let img = graphics.create_image_from_raw_pixels(
-            speedy2d::image::ImageDataType::RGBA, 
-            speedy2d::image::ImageSmoothingMode::Linear, 
-            self.texture_size, 
-            &self.texture_slice
-        ).unwrap();
-
-        // drawing map
-        graphics.draw_rectangle_image(self.map_rect.clone(), &img);
-        
-        // ms
-        graphics.draw_text(
-            (10.0, 10.0), Color::BLACK, 
-            &self.font.layout_text(&((self.delta.elapsed().as_millis()).to_string() + "ms"), 32.0, TextOptions::new())
-        );
-
-        helper.request_redraw();
-    }
-    fn on_key_down(
-            &mut self,
-            _helper: &mut WindowHelper<()>,
-            virtual_key_code: Option<VirtualKeyCode>,
-            _scancode: speedy2d::window::KeyScancode
-        ) {
-        if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Left {self.ins[0] = true;}
-        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Right {self.ins[1] = true;}
-        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Up {self.ins[2] = true;}
-        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Down {self.ins[3] = true;}
-        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Q {std::panic!("Zdupydomordyzaur Jeży");}
-
-    }      
-    fn on_key_up(      
-            &mut self,      
-            _helper: &mut WindowHelper<()>,      
-            virtual_key_code: Option<VirtualKeyCode>,
-            _scancode: speedy2d::window::KeyScancode   
-        ) {      
-              
-        if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Left {self.ins[0] = false;}
-        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Right {self.ins[1] = false;}
-        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Up {self.ins[2] = false;}
-        else if virtual_key_code.unwrap_or(VirtualKeyCode::Numpad0) == VirtualKeyCode::Down {self.ins[3] = false;}
+        let tx = Texture2D::from_rgba8(self.texture_size[0], self.texture_size[1], &self.texture_slice);
+        draw_texture(&tx, 0., 0., WHITE);
     }
 }
 
-#[derive(Clone)]
-struct Hole {
-    pos: (usize, usize),
-    rad: i32,
-}
-
-impl Hole {
-    fn new(pos: (usize, usize), rad : i32) -> Self {
-        Self { pos, rad }
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "Lenia".to_owned(),
+        fullscreen: false,
+        window_width: (MAP_SIZE.0 as f32 * DISPLAY_SCALE) as i32,
+        window_height: (MAP_SIZE.1 as f32 * DISPLAY_SCALE) as i32,
+        ..Default::default()
     }
 }
 
-fn main() {
-    let window = Window::new_centered(
-        "Lenia", 
-        ((MAP_SIZE.0 as f32 * DISPLAY_SCALE) as u32, (MAP_SIZE.1 as f32 * DISPLAY_SCALE) as u32)
-    ).unwrap();
-    window.run_loop(WinHandler::new(SEED));
-}
+#[macroquad::main(window_conf)]
+async fn main() {
+    rand::srand(SEED);
+    let mut eco = Ecosystem::new();
 
+    loop {
+        if is_key_down(KeyCode::Q) {break;}
+        eco.on_draw();
+        draw_text(&get_fps().to_string(), 5., 35., 35., WHITE);
+        next_frame().await
+    }
+}
 
 
 
