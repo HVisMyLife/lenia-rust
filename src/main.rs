@@ -1,8 +1,7 @@
 #![allow(clippy::ptr_arg)]
 use rayon::prelude::*;
 use ndarray::{prelude::*, Zip};
-use fftconvolve::{fftconvolve, Mode};
-use ndarray_ndimage::{pad, PadMode};
+use ndarray_conv::*;
 use macroquad::prelude::*;
 
 pub const K_R: i32 = 60;            // radius of kernel no.0 20
@@ -19,26 +18,6 @@ pub const SEED: u64 = 2;
 pub const DISPLAY_SCALE: f32 = 1.0;
 
 
-
-// calc for kernel matrix values
-pub fn kernel_calc(radius: i32) -> Array2<f32> {
-    let mut kernel: Array2<f32> = Array2::<f32>::zeros(( (2*radius+1) as usize, (2*radius+1) as usize ));
-
-    for ny in -radius..=radius {
-        let d = f32::sqrt((radius * radius - ny * ny) as f32) as i32;
-        for nx in -radius..=radius {
-            let r = (f32::sqrt((nx.pow(2) + ny.pow(2)) as f32) + 1.0) / radius as f32;
-
-            if ny == 0 && nx == 0 || nx < -d || nx > d { kernel[[(nx+radius)as usize, (ny+radius)as usize]] = 0.0;}
-            else {kernel[[(nx+radius)as usize, (ny+radius)as usize]] = ( -((r - 0.5)/0.15).powi(2) / 2.0 ).exp();}// kernel shape
-        }
-    }
-
-    kernel /= kernel.sum();
-    kernel
-}
-
-
 struct Ecosystem {
     // main lenia parameters
     g_params: (f32,f32,f32), // dt, g-center, g-width ( 0-100 neighbourhood )
@@ -51,37 +30,47 @@ struct Ecosystem {
     
     // main array of states
     map: Array2<f32>,     
-    map_save: Array2<f32>,
-    
-    nh_sum: Array2<f32>,
+    map_convolved: Array2<f32>,
 }
 
 impl Ecosystem {
     fn new() -> Self {
-        let mut map = Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize));
 
+        // generate random starting map
+        let mut map = Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize));
         for y in rand::gen_range((MAP_SIZE.1 as f32/3.0) as i32, MAP_SIZE.1/2)..rand::gen_range(MAP_SIZE.1/2, (MAP_SIZE.1 as f32/1.5) as i32) {
             for x in rand::gen_range((MAP_SIZE.0 as f32/10.0) as i32, MAP_SIZE.0/2)..rand::gen_range(MAP_SIZE.0/2, (MAP_SIZE.0 as f32/1.1) as i32) {
                 map[[x as usize, y as usize]] = rand::gen_range(0.0, 1.0);
             }
         } 
 
+        // generate kernel
+        let mut kernel: Array2<f32> = Array2::<f32>::zeros(( (2*K_R+1) as usize, (2*K_R+1) as usize ));
+        for ny in -K_R..=K_R {
+            let d = f32::sqrt((K_R * K_R - ny * ny) as f32) as i32;
+            for nx in -K_R..=K_R {
+                let r = (f32::sqrt((nx.pow(2) + ny.pow(2)) as f32) + 1.0) / K_R as f32;
+    
+                if ny == 0 && nx == 0 || nx < -d || nx > d { kernel[[(nx+K_R)as usize, (ny+K_R)as usize]] = 0.0;}
+                else {kernel[[(nx+K_R)as usize, (ny+K_R)as usize]] = ( -((r - 0.5)/0.15).powi(2) / 2.0 ).exp();}// kernel shape
+            }
+        }
+        kernel /= kernel.sum();
+
         
         Self { 
             g_params: (DT/100.0, CENTER / 100.0, WIDTH / 100.0), // 0-100 neighbourhood
-            kernel: kernel_calc(K_R),
+            kernel,
 
             texture_slice: [255;  (4 * MAP_SIZE.1 * MAP_SIZE.0) as usize].to_vec(),
             texture_size: [MAP_SIZE.0 as u16, MAP_SIZE.1 as u16],
 
             map, 
-            map_save: Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize)),
-            
-            nh_sum: Array2::<f32>::zeros([MAP_SIZE.0 as usize + 2*K_R as usize, MAP_SIZE.1 as usize + 2*K_R as usize]),
+            map_convolved: Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize)),
         }
     }
 
-
+    // convert cell value to color spectrum
     fn calc_img(&mut self) {
         self.texture_slice.par_chunks_mut(4).enumerate().for_each(|(i, x)| {
             let col = (self.map[[i%MAP_SIZE.0 as usize, i/MAP_SIZE.0 as usize]] * 255.0) as i32;
@@ -97,19 +86,12 @@ impl Ecosystem {
     fn on_draw(&mut self){
         clear_background(Color::from_rgba(24, 24, 24, 255));
 
-        // padding on borders, so convolution will be continous
-        self.map_save = pad(&self.map, &[[K_MAX as usize; 2]], PadMode::Wrap);
+        // fft convolving map using kernel
+        self.map_convolved = self.map.conv_2d_fft(&self.kernel, PaddingSize::Same, PaddingMode::Circular).unwrap().clone();
         
-
-        // convolving using fft and cutting borders
-        self.nh_sum = fftconvolve(&self.map_save, &self.kernel, Mode::Same)
-            .unwrap()
-            .slice(s![K_MAX..MAP_SIZE.0 + K_MAX, K_MAX..MAP_SIZE.1 + K_MAX])
-            .to_owned();
-
         // applying growth mapping function
         Zip::from(&mut self.map)
-            .and(&self.nh_sum)
+            .and(&self.map_convolved)
             .par_for_each(|m, &o| {
                 *m = (
                     *m 
@@ -120,20 +102,13 @@ impl Ecosystem {
         // calculating img pixels
         self.calc_img();
 
+        // generating texture
         let tx = Texture2D::from_rgba8(self.texture_size[0], self.texture_size[1], &self.texture_slice);
         draw_texture(&tx, 0., 0., WHITE);
     }
 }
 
-fn window_conf() -> Conf {
-    Conf {
-        window_title: "Lenia".to_owned(),
-        fullscreen: false,
-        window_width: (MAP_SIZE.0 as f32 * DISPLAY_SCALE) as i32,
-        window_height: (MAP_SIZE.1 as f32 * DISPLAY_SCALE) as i32,
-        ..Default::default()
-    }
-}
+
 
 #[macroquad::main(window_conf)]
 async fn main() {
@@ -148,10 +123,29 @@ async fn main() {
     }
 }
 
-
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "Lenia".to_owned(),
+        fullscreen: false,
+        window_width: (MAP_SIZE.0 as f32 * DISPLAY_SCALE) as i32,
+        window_height: (MAP_SIZE.1 as f32 * DISPLAY_SCALE) as i32,
+        ..Default::default()
+    }
+}
 
 
 // Legacy code
+
+        // padding on borders, so convolution will be continous
+        // self.map_save = pad(&self.map, &[[K_MAX as usize; 2]], PadMode::Wrap);
+        // 
+        //
+        // // convolving using fft and cutting borders
+        // self.nh_sum = fftconvolve(&self.map_save, &self.kernel, Mode::Same)
+        //     .unwrap()
+        //     .slice(s![K_MAX..MAP_SIZE.0 + K_MAX, K_MAX..MAP_SIZE.1 + K_MAX])
+        //     .to_owned();
+
 
         
         //for ny in 0..=K_R as usize*2 {

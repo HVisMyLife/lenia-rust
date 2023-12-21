@@ -221,6 +221,7 @@ dependencies = [
  "fftconvolve",
  "macroquad",
  "ndarray",
+ "ndarray-conv",
  "ndarray-ndimage",
  "rayon",
 ]
@@ -339,6 +340,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "302d7ab3130588088d277783b1e2d2e10c9e9e4a16dd9050e6ec93fb3e7048f4"
 
 [[package]]
+name = "libm"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
+
+[[package]]
 name = "macroquad"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -429,6 +436,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ndarray-conv"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64b94031956cace56dfedf09c1ba98d6a483020ac0ac0567b132b19bd8f31bd6"
+dependencies = [
+ "ndarray",
+ "ndarray-rand",
+ "num",
+ "realfft",
+ "rustfft",
+ "transpose",
+]
+
+[[package]]
 name = "ndarray-linalg"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -453,6 +474,17 @@ dependencies = [
  "ndarray",
  "ndarray-stats",
  "num-traits",
+]
+
+[[package]]
+name = "ndarray-rand"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65608f937acc725f5b164dcf40f4f0bc5d67dc268ab8a649d3002606718c4588"
+dependencies = [
+ "ndarray",
+ "rand",
+ "rand_distr",
 ]
 
 [[package]]
@@ -561,6 +593,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39e3200413f237f41ab11ad6d161bc7239c84dcb631773ccd7de3dfe4b5c267c"
 dependencies = [
  "autocfg",
+ "libm",
 ]
 
 [[package]]
@@ -658,6 +691,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom",
+]
+
+[[package]]
+name = "rand_distr"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
+dependencies = [
+ "num-traits",
+ "rand",
 ]
 
 [[package]]

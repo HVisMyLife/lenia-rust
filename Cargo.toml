@@ -9,6 +9,7 @@ edition = "2021"
 rayon = "^1.8"
 #rand = "^0.8"
 ndarray = { version = "^0.15", features = ["rayon"]}
+ndarray-conv = "^0.2"
 ndarray-ndimage = "^0.4"
 fftconvolve = "^0.1"
 macroquad = "^0.4"
