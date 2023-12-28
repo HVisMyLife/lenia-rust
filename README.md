@@ -20,3 +20,6 @@ It's learning itself to "not die": there are starting parameters and simulation 
 
 For now, there are two kernels:
 ![example](https://github.com/HVisMyLife/lenia-rust/blob/master/kernels.png)
+
+Each kernel have it's own growth mapping function, which is defined by 3 parameters:
+![example](https://github.com/HVisMyLife/lenia-rust/blob/master/growth_map.png)
