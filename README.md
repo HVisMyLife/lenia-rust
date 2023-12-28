@@ -5,4 +5,4 @@ Work in progress...
 
 It's just implementation from this doc: https://arxiv.org/pdf/2005.03742.pdf
 
-<video src='https://github.com/HVisMyLife/lenia-rust/blob/master/recording.mkv' width=180/>
+![example](https://github.com/HVisMyLife/lenia-rust/blob/master/recording.gif)
