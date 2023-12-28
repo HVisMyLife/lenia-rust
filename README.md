@@ -17,3 +17,6 @@ Controls:
 It's learning itself to "not die": there are starting parameters and simulation runs. When it dies ( or is "exploding") it's survival time is saved. If new generation (random changes are introduced) outlives previous, it's parameters are being saved and passed on.
 
 ![example](https://github.com/HVisMyLife/lenia-rust/blob/master/recording.gif)
+
+For now, there are two kernels:
+![example](https://github.com/HVisMyLife/lenia-rust/blob/master/kernels.png)

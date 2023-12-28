@@ -51,7 +51,7 @@ impl Ecosystem {
             Layer {
                 size: 92,
                 kernel: Default::default(),
-                g_params: (0.100, 0.118, 0.021),
+                g_params: (0.100, 0.118, 0.023),
             },
             Layer {
                 size: 92,
