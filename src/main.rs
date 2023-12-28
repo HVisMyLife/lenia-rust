@@ -3,70 +3,102 @@ use rayon::prelude::*;
 use ndarray::{prelude::*, Zip};
 use ndarray_conv::*;
 use macroquad::prelude::*;
+use bincode::{serialize, deserialize};
+use std::fs::File;
+use std::io::prelude::*;
 
-pub const K_R: i32 = 60;            // radius of kernel no.0 20
-pub const K_MAX: i32 = K_R;         // maximum radius of kernel any
+mod fta;
+use fta::FrameTimeAnalyzer;
 
-pub const DT: f32 = 10.0;       // % add each cycle
-pub const CENTER: f32 = 15.00;  // % of neighbours full .14
-pub const WIDTH: f32 = 1.42;    // width .03
 
 // size of map for convolution, it is later padded for warp func, so we have to cut it for now
-pub const MAP_SIZE: (i32, i32) = (1024-2*K_R, 1024-2*K_R);
-pub const SEED: u64 = 2;
+pub const MAP_SIZE: (i32, i32) = (1280, 820);
+pub const SEED: u64 = 1;
 
-pub const DISPLAY_SCALE: f32 = 1.0;
-
+struct Layer {
+    size: i32,
+    kernel: Array2<f32>,
+    pub g_params: (f32,f32,f32), // dt, g-center, g-width ( 0-100 neighbourhood )
+}
 
 struct Ecosystem {
-    // main lenia parameters
-    g_params: (f32,f32,f32), // dt, g-center, g-width ( 0-100 neighbourhood )
-    // precalculated kernel values
-    kernel: Array2<f32>,
-    
     // texture for drawing states
     texture_slice: Vec<u8>,
     texture_size: [u16; 2],
     
     // main array of states
-    map: Array2<f32>,     
-    map_convolved: Array2<f32>,
+    pub map: Array2<f32>,
+
+    // layers
+    pub layer: [Layer; 2],
+
+    pub fitness: f32, // 0 - 2 - 20
+    pub cycles: u32, // 0 - 2 - 20
 }
 
 impl Ecosystem {
     fn new() -> Self {
 
         // generate random starting map
-        let mut map = Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize));
-        for y in rand::gen_range((MAP_SIZE.1 as f32/3.0) as i32, MAP_SIZE.1/2)..rand::gen_range(MAP_SIZE.1/2, (MAP_SIZE.1 as f32/1.5) as i32) {
-            for x in rand::gen_range((MAP_SIZE.0 as f32/10.0) as i32, MAP_SIZE.0/2)..rand::gen_range(MAP_SIZE.0/2, (MAP_SIZE.0 as f32/1.1) as i32) {
-                map[[x as usize, y as usize]] = rand::gen_range(0.0, 1.0);
-            }
-        } 
+        let map = Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize));
+        // for y in rand::gen_range((MAP_SIZE.1 as f32/3.0) as i32, MAP_SIZE.1/2)..rand::gen_range(MAP_SIZE.1/2, (MAP_SIZE.1 as f32/1.5) as i32) {
+        //     for x in rand::gen_range((MAP_SIZE.0 as f32/10.0) as i32, MAP_SIZE.0/2)..rand::gen_range(MAP_SIZE.0/2, (MAP_SIZE.0 as f32/1.1) as i32) {
+        //         map[[x as usize, y as usize]] = rand::gen_range(0.0, 1.0);
+        //     }
+        // } 
 
-        // generate kernel
-        let mut kernel: Array2<f32> = Array2::<f32>::zeros(( (2*K_R+1) as usize, (2*K_R+1) as usize ));
-        for ny in -K_R..=K_R {
-            let d = f32::sqrt((K_R * K_R - ny * ny) as f32) as i32;
-            for nx in -K_R..=K_R {
-                let r = (f32::sqrt((nx.pow(2) + ny.pow(2)) as f32) + 1.0) / K_R as f32;
+        let mut layer: [Layer; 2] = [
+            Layer {
+                size: 92,
+                kernel: Default::default(),
+                g_params: (0.100, 0.118, 0.021),
+            },
+            Layer {
+                size: 92,
+                kernel: Default::default(),
+                g_params: (0.100, 0.167, 0.016),
+            },
+        ];
+        layer[0].kernel = Array2::<f32>::zeros(( (2*layer[0].size+1) as usize, (2*layer[0].size+1) as usize ));
+        layer[1].kernel = Array2::<f32>::zeros(( (2*layer[1].size+1) as usize, (2*layer[1].size+1) as usize ));
+        // generate kernel 0
+        for ny in -layer[0].size..=layer[0].size {
+            let d = f32::sqrt((layer[0].size * layer[0].size - ny * ny) as f32) as i32;
+            for nx in -layer[0].size..=layer[0].size {
+                let r = (f32::sqrt((nx.pow(2) + ny.pow(2)) as f32) + 1.0) / layer[0].size as f32;
     
-                if ny == 0 && nx == 0 || nx < -d || nx > d { kernel[[(nx+K_R)as usize, (ny+K_R)as usize]] = 0.0;}
-                else {kernel[[(nx+K_R)as usize, (ny+K_R)as usize]] = ( -((r - 0.5)/0.15).powi(2) / 2.0 ).exp();}// kernel shape
+                if ny == 0 && nx == 0 || nx < -d || nx > d { layer[0].kernel[[(nx+layer[0].size)as usize, (ny+layer[0].size)as usize]] = 0.0;}
+                else {layer[0].kernel[[(nx+layer[0].size)as usize, (ny+layer[0].size)as usize]] = ( -((r - 0.5)/0.15).powi(2) / 2.0 ).exp();}// kernel shape
             }
         }
-        kernel /= kernel.sum();
+        layer[0].kernel /= layer[0].kernel.sum();
 
+        // generate kernel 1
+        for ny in -layer[1].size..=layer[1].size {
+            let d = f32::sqrt((layer[1].size * layer[1].size - ny * ny) as f32) as i32;
+            for nx in -layer[1].size..=layer[1].size {
+                let r = (f32::sqrt((nx.pow(2) + ny.pow(2)) as f32) + 1.0) / layer[0].size as f32;
+    
+                if ny == 0 && nx == 0 || nx < -d || nx > d { layer[1].kernel[[(nx+layer[1].size)as usize, (ny+layer[1].size)as usize]] = 0.0;}
+                else {layer[1].kernel[[(nx+layer[1].size)as usize, (ny+layer[1].size)as usize]] =
+                    ( ( -150. * (r-(3./4.)).powi(2) ).exp() * (1./3.) ) +
+                    ( ( -150. * (r-(1./2.)).powi(2) ).exp() * (2./3.) ) +
+                    ( ( -150. * (r-(1./4.)).powi(2) ).exp() * (1./1.) )
+                    ;}// kernel shape
+
+            }
+        }
+        layer[1].kernel /= layer[1].kernel.sum();
         
         Self { 
-            g_params: (DT/100.0, CENTER / 100.0, WIDTH / 100.0), // 0-100 neighbourhood
-            kernel,
 
             texture_slice: [255;  (4 * MAP_SIZE.1 * MAP_SIZE.0) as usize].to_vec(),
             texture_size: [MAP_SIZE.0 as u16, MAP_SIZE.1 as u16],
 
-            map, 
-            map_convolved: Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize)),
+            map,
+            layer,
+            fitness: 0.,
+            cycles: 0,
         }
     }
 
@@ -87,18 +119,29 @@ impl Ecosystem {
         clear_background(Color::from_rgba(24, 24, 24, 255));
 
         // fft convolving map using kernel
-        self.map_convolved = self.map.conv_2d_fft(&self.kernel, PaddingSize::Same, PaddingMode::Circular).unwrap().clone();
+        let mut mc0: Array2<f32> = Default::default();
+        let mut mc1: Array2<f32> = Default::default();
+        rayon::join(
+            || {mc0 = self.map.conv_2d_fft(&self.layer[0].kernel, PaddingSize::Same, PaddingMode::Circular).unwrap();}, 
+            || {mc1 = self.map.conv_2d_fft(&self.layer[1].kernel, PaddingSize::Same, PaddingMode::Circular).unwrap();}
+        );
         
         // applying growth mapping function
         Zip::from(&mut self.map)
-            .and(&self.map_convolved)
-            .par_for_each(|m, &o| {
+            .and(&mc0)
+            .and(&mc1)
+            .par_for_each(|m, &o0, &o1| {
                 *m = (
-                    *m 
-                    + self.g_params.0 * (( -((o-self.g_params.1) / self.g_params.2).powi(2) / 2.0 ).exp() * 2.0 -1.0)
+                    *m + 
+                    (self.layer[0].g_params.0 * (( -((o0 -self.layer[0].g_params.1) / self.layer[0].g_params.2).powi(2) / 2.0 ).exp() * 2.0 -1.0) + 
+                        self.layer[1].g_params.0 * (( -((o1 -self.layer[1].g_params.1) / self.layer[1].g_params.2).powi(2) / 2.0 ).exp() * 2.0 -1.0)
+                    ) / 2.
                 ).clamp(0.0, 1.0)     // clamping between 0-1: A + dtG(A*K)
             });
 
+        self.fitness = (self.map.sum()/(MAP_SIZE.0 * MAP_SIZE.1)as f32*10000.).round() / 100.;
+        self.cycles+=1;
+        
         // calculating img pixels
         self.calc_img();
 
@@ -108,27 +151,122 @@ impl Ecosystem {
     }
 }
 
+struct Best {
+    pub g_params: [(f32,f32,f32); 2], // dt, g-center, g-width ( 0-100 neighbourhood )
+    pub cycles: u32,
+}
 
+impl Best {
+    pub fn compare(&mut self, eco: &mut Ecosystem) {
+        if eco.fitness > 0.1 {eco.cycles = (eco.cycles as f32 * 0.8) as u32;} //overflow punish
+        if eco.cycles > self.cycles {
+            self.g_params[0] = eco.layer[0].g_params;
+            self.g_params[1] = eco.layer[1].g_params;
+            self.cycles = eco.cycles;
+        }
+        match rand::gen_range(0, 4) {
+            0 => eco.layer[0].g_params.1 = self.g_params[0].1 + rand::gen_range(-0.01, 0.01),
+            1 => eco.layer[0].g_params.2 = self.g_params[0].2 + rand::gen_range(-0.001, 0.001),
+            2 => eco.layer[1].g_params.1 = self.g_params[1].1 + rand::gen_range(-0.01, 0.01),
+            3 => eco.layer[1].g_params.2 = self.g_params[1].2 + rand::gen_range(-0.001, 0.001),
+            _ => {},
+        }
+        eco.map = load("data.bin");
+        eco.cycles = 0;
+    }
+}
 
 #[macroquad::main(window_conf)]
 async fn main() {
     rand::srand(SEED);
     let mut eco = Ecosystem::new();
+    let mut frame_time_analyzer = FrameTimeAnalyzer::new(16);
+    let mut selection: i32 = 0;
+    eco.map = load("data.bin");
+    let mut best = Best {
+        g_params: [eco.layer[0].g_params, eco.layer[1].g_params],
+        cycles: 0,
+    };
 
     loop {
-        if is_key_down(KeyCode::Q) {break;}
-        eco.on_draw();
-        draw_text(&get_fps().to_string(), 5., 35., 35., WHITE);
+        if !is_key_down(KeyCode::A) {eco.on_draw();}
+        frame_time_analyzer.add_frame_time(get_frame_time()*1000.);
+        draw_text(&(frame_time_analyzer.smooth_frame_time().round().to_string() + " ms"), 8., 30., 35., WHITE);
+        if ui(&mut eco, &mut selection) {break;}
+        if is_key_pressed(KeyCode::G) {best.cycles = 0;} // add to best
+        if is_key_pressed(KeyCode::F) {eco.cycles = 0; eco.fitness = 50.} // add to best
+        if eco.fitness == 0. || eco.fitness > 3.0 {best.compare(&mut eco);}
         next_frame().await
     }
+}
+
+ 
+// save nn to file
+fn save(path: &str, data: &Array2<f32>) {        
+    // convert simplified nn to Vec<u8>
+    let encoded: Vec<u8> = serialize(
+        data
+    ).unwrap();
+ 
+    // open file and write whole Vec<u8>
+    let mut file = File::create(path).unwrap();
+    file.write_all(&encoded).unwrap();
+} 
+ 
+// load nn from file
+fn load(path: &str) -> Array2<f32> {
+    // convert readed Vec<u8> to plain nn
+    let mut buffer = vec![];
+    let mut file = File::open(path).unwrap();
+    file.read_to_end(&mut buffer).unwrap();
+    let decoded: Array2<f32> = deserialize(&buffer).unwrap();
+ 
+    decoded
+} 
+ 
+fn ui(eco: &mut Ecosystem, selection: &mut i32) -> bool {
+    if is_key_pressed(KeyCode::S) {save("data.bin", &eco.map);}
+    if is_key_pressed(KeyCode::L) {eco.map = load("data.bin");}
+    if is_key_pressed(KeyCode::Up) {*selection-=1;}
+    if is_key_pressed(KeyCode::Down) {*selection+=1;}
+    *selection = selection.clone().clamp(0, 5);
+    let mut change = 0.;
+
+    if is_key_pressed(KeyCode::Right) || is_key_pressed(KeyCode::Left) {
+        if is_key_pressed(KeyCode::Left) {change=-0.001;}
+        if is_key_pressed(KeyCode::Right) {change=0.001;}
+        match selection {
+            0 => eco.layer[0].g_params.0 = ((eco.layer[0].g_params.0 + change) * 1000.).round() as f32 / 1000.,
+            1 => eco.layer[0].g_params.1 = ((eco.layer[0].g_params.1 + change) * 1000.).round() as f32 / 1000.,
+            2 => eco.layer[0].g_params.2 = ((eco.layer[0].g_params.2 + change) * 1000.).round() as f32 / 1000.,
+            3 => eco.layer[1].g_params.0 = ((eco.layer[1].g_params.0 + change) * 1000.).round() as f32 / 1000.,
+            4 => eco.layer[1].g_params.1 = ((eco.layer[1].g_params.1 + change) * 1000.).round() as f32 / 1000.,
+            5 => eco.layer[1].g_params.2 = ((eco.layer[1].g_params.2 + change) * 1000.).round() as f32 / 1000.,
+            _ => {},
+        }
+    }
+
+    draw_text(&("deltaT0: ".to_owned() + &eco.layer[0].g_params.0.to_string()), 8., 30.*2., 30., WHITE);
+    draw_text(&("offset0: ".to_owned() + &eco.layer[0].g_params.1.to_string()), 8., 30.*3., 30., WHITE);
+    draw_text(&("width0:  ".to_owned() + &eco.layer[0].g_params.2.to_string()), 8., 30.*4., 30., WHITE);
+    draw_text(&("deltaT1: ".to_owned() + &eco.layer[1].g_params.0.to_string()), 8., 30.*5., 30., WHITE);
+    draw_text(&("offset1: ".to_owned() + &eco.layer[1].g_params.1.to_string()), 8., 30.*6., 30., WHITE);
+    draw_text(&("width1:  ".to_owned() + &eco.layer[1].g_params.2.to_string()), 8., 30.*7., 30., WHITE);
+    draw_circle(0., 50. + (30 * *selection) as f32, 10., RED);
+
+
+    draw_text(&("%: ".to_owned() + &eco.fitness.to_string()), 8., 30.*9., 30., WHITE);
+    draw_text(&("t: ".to_owned() + &eco.cycles.to_string()), 8., 30.*10., 30., WHITE);
+    is_key_down(KeyCode::Q)
 }
 
 fn window_conf() -> Conf {
     Conf {
         window_title: "Lenia".to_owned(),
         fullscreen: false,
-        window_width: (MAP_SIZE.0 as f32 * DISPLAY_SCALE) as i32,
-        window_height: (MAP_SIZE.1 as f32 * DISPLAY_SCALE) as i32,
+        window_width: MAP_SIZE.0,
+        window_height: MAP_SIZE.1,
+        sample_count: 16,
         ..Default::default()
     }
 }
