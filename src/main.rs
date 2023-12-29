@@ -114,10 +114,8 @@ impl Ecosystem {
             if col > 0 {x[3] = 255;} else {x[3] = 0;}
         });
     }
-   
-    fn on_draw(&mut self){
-        clear_background(Color::from_rgba(24, 24, 24, 255));
 
+    fn calc_conv(&mut self) {
         // fft convolving map using kernel
         let mut mc0: Array2<f32> = Default::default();
         let mut mc1: Array2<f32> = Default::default();
@@ -141,9 +139,17 @@ impl Ecosystem {
 
         self.fitness = (self.map.sum()/(MAP_SIZE.0 * MAP_SIZE.1)as f32*10000.).round() / 100.;
         self.cycles+=1;
-        
+    }
+   
+    fn on_draw(&mut self, pause: &bool){
+        clear_background(Color::from_rgba(24, 24, 24, 255));
+
+        if !pause {
+        //calculating convolution
+            self.calc_conv();
         // calculating img pixels
-        self.calc_img();
+            self.calc_img();
+        }
 
         // generating texture
         let tx = Texture2D::from_rgba8(self.texture_size[0], self.texture_size[1], &self.texture_slice);
@@ -180,27 +186,107 @@ impl Best {
 async fn main() {
     rand::srand(SEED);
     let mut eco = Ecosystem::new();
-    let mut frame_time_analyzer = FrameTimeAnalyzer::new(16);
-    let mut selection: i32 = 0;
     eco.map = load("data.bin");
-    let mut best = Best {
-        g_params: [eco.layer[0].g_params, eco.layer[1].g_params],
-        cycles: 0,
-    };
+    let font = macroquad::text::load_ttf_font("font.ttf").await.unwrap();
+    let mut ui = UI::new(font);
 
     loop {
-        if !is_key_down(KeyCode::A) {eco.on_draw();}
-        frame_time_analyzer.add_frame_time(get_frame_time()*1000.);
-        draw_text(&(frame_time_analyzer.smooth_frame_time().round().to_string() + " ms"), 8., 30., 35., WHITE);
-        if ui(&mut eco, &mut selection) {break;}
-        if is_key_pressed(KeyCode::G) {best.cycles = 0;} // add to best
-        if is_key_pressed(KeyCode::F) {eco.cycles = 0; eco.fitness = 50.} // add to best
-        if eco.fitness == 0. || eco.fitness > 3.0 {best.compare(&mut eco);}
+        eco.on_draw(&ui.pause);
+        if ui.execute(&mut eco) {break};
         next_frame().await
     }
 }
 
- 
+ struct UI {
+    fta: FrameTimeAnalyzer,
+    selection: i32,
+    pub pause: bool,
+    autotune: bool,
+    best: Best,
+    font: Font,
+}
+
+impl UI {
+    fn new(font: Font) -> Self {
+        
+        UI { 
+            fta: FrameTimeAnalyzer::new(16), 
+            selection: 0, 
+            pause: false, 
+            autotune: true,
+            best: Best {
+                g_params: [(0.,0.,0.), (0.,0.,0.)],
+                cycles: 0,
+            },
+            font,
+        }
+    }
+    fn execute(&mut self, eco: &mut Ecosystem) -> bool {
+        if self.autotune && (eco.fitness == 0. || eco.fitness > 5.0) {self.best.compare(eco);}
+        if is_key_pressed(KeyCode::T) {self.autotune = !self.autotune;} // add to best
+        if is_key_pressed(KeyCode::G) {self.best.cycles = 0;} // add to best
+        if is_key_pressed(KeyCode::F) {eco.cycles = 0; eco.fitness = 50.} // add to best
+        if is_key_pressed(KeyCode::A) {self.pause = !self.pause;}
+        if is_key_pressed(KeyCode::S) {save("data.bin", &eco.map);}
+        if is_key_pressed(KeyCode::L) {eco.map = load("data.bin");}
+        if is_key_pressed(KeyCode::Up) {self.selection-=1;}
+        if is_key_pressed(KeyCode::Down) {self.selection+=1;}
+        self.selection = self.selection.clone().clamp(0, 5);
+        let mut change = 0.;
+
+        if is_key_pressed(KeyCode::Right) || is_key_pressed(KeyCode::Left) {
+            if is_key_pressed(KeyCode::Left) {change=-0.001;}
+            if is_key_pressed(KeyCode::Right) {change=0.001;}
+            match self.selection {
+                0 => eco.layer[0].g_params.0 = ((eco.layer[0].g_params.0 + change) * 1000.).round() as f32 / 1000.,
+                1 => eco.layer[0].g_params.1 = ((eco.layer[0].g_params.1 + change) * 1000.).round() as f32 / 1000.,
+                2 => eco.layer[0].g_params.2 = ((eco.layer[0].g_params.2 + change) * 1000.).round() as f32 / 1000.,
+                3 => eco.layer[1].g_params.0 = ((eco.layer[1].g_params.0 + change) * 1000.).round() as f32 / 1000.,
+                4 => eco.layer[1].g_params.1 = ((eco.layer[1].g_params.1 + change) * 1000.).round() as f32 / 1000.,
+                5 => eco.layer[1].g_params.2 = ((eco.layer[1].g_params.2 + change) * 1000.).round() as f32 / 1000.,
+                _ => {},
+            }
+        }
+        let mut tp = TextParams { 
+            font: Some(&self.font), 
+            font_size: 30, 
+            font_scale: 1., 
+            font_scale_aspect: 1., 
+            rotation: 0., 
+            color: WHITE 
+        };
+        self.fta.add_frame_time(get_frame_time()*1000.);
+        draw_text_ex(&(self.fta.smooth_frame_time().round().to_string() + " ms"), 8., 30., tp.clone());
+        
+        draw_text_ex(&("deltaT0: ".to_owned() + &eco.layer[0].g_params.0.to_string()), 8., 30.*2., tp.clone());
+        draw_text_ex(&("offset0: ".to_owned() + &eco.layer[0].g_params.1.to_string()), 8., 30.*3., tp.clone());
+        draw_text_ex(&("width0:  ".to_owned() + &eco.layer[0].g_params.2.to_string()), 8., 30.*4., tp.clone());
+        draw_text_ex(&("deltaT1: ".to_owned() + &eco.layer[1].g_params.0.to_string()), 8., 30.*5., tp.clone());
+        draw_text_ex(&("offset1: ".to_owned() + &eco.layer[1].g_params.1.to_string()), 8., 30.*6., tp.clone());
+        draw_text_ex(&("width1:  ".to_owned() + &eco.layer[1].g_params.2.to_string()), 8., 30.*7., tp.clone());
+        draw_circle(0., 50. + (30 * self.selection) as f32, 10., RED);
+
+        draw_text_ex(&("%: ".to_owned() + &eco.fitness.to_string()), 8., 30.*9., tp.clone());
+        draw_text_ex(&("t: ".to_owned() + &eco.cycles.to_string()), 8., 30.*10., tp.clone());
+        draw_text_ex(&("autotune: ".to_owned() + &self.autotune.to_string()), 8., 30.*11., tp.clone());
+        tp.font_size = 128;
+        if self.pause {draw_text_ex("PAUSE", 256., 256., tp);}
+        
+        is_key_down(KeyCode::Q)
+    }
+}
+
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "Lenia".to_owned(),
+        fullscreen: false,
+        window_width: MAP_SIZE.0,
+        window_height: MAP_SIZE.1,
+        sample_count: 16,
+        ..Default::default()
+    }
+}
+
 // save nn to file
 fn save(path: &str, data: &Array2<f32>) {        
     // convert simplified nn to Vec<u8>
@@ -223,55 +309,6 @@ fn load(path: &str) -> Array2<f32> {
  
     decoded
 } 
- 
-fn ui(eco: &mut Ecosystem, selection: &mut i32) -> bool {
-    if is_key_pressed(KeyCode::S) {save("data.bin", &eco.map);}
-    if is_key_pressed(KeyCode::L) {eco.map = load("data.bin");}
-    if is_key_pressed(KeyCode::Up) {*selection-=1;}
-    if is_key_pressed(KeyCode::Down) {*selection+=1;}
-    *selection = selection.clone().clamp(0, 5);
-    let mut change = 0.;
-
-    if is_key_pressed(KeyCode::Right) || is_key_pressed(KeyCode::Left) {
-        if is_key_pressed(KeyCode::Left) {change=-0.001;}
-        if is_key_pressed(KeyCode::Right) {change=0.001;}
-        match selection {
-            0 => eco.layer[0].g_params.0 = ((eco.layer[0].g_params.0 + change) * 1000.).round() as f32 / 1000.,
-            1 => eco.layer[0].g_params.1 = ((eco.layer[0].g_params.1 + change) * 1000.).round() as f32 / 1000.,
-            2 => eco.layer[0].g_params.2 = ((eco.layer[0].g_params.2 + change) * 1000.).round() as f32 / 1000.,
-            3 => eco.layer[1].g_params.0 = ((eco.layer[1].g_params.0 + change) * 1000.).round() as f32 / 1000.,
-            4 => eco.layer[1].g_params.1 = ((eco.layer[1].g_params.1 + change) * 1000.).round() as f32 / 1000.,
-            5 => eco.layer[1].g_params.2 = ((eco.layer[1].g_params.2 + change) * 1000.).round() as f32 / 1000.,
-            _ => {},
-        }
-    }
-
-    draw_text(&("deltaT0: ".to_owned() + &eco.layer[0].g_params.0.to_string()), 8., 30.*2., 30., WHITE);
-    draw_text(&("offset0: ".to_owned() + &eco.layer[0].g_params.1.to_string()), 8., 30.*3., 30., WHITE);
-    draw_text(&("width0:  ".to_owned() + &eco.layer[0].g_params.2.to_string()), 8., 30.*4., 30., WHITE);
-    draw_text(&("deltaT1: ".to_owned() + &eco.layer[1].g_params.0.to_string()), 8., 30.*5., 30., WHITE);
-    draw_text(&("offset1: ".to_owned() + &eco.layer[1].g_params.1.to_string()), 8., 30.*6., 30., WHITE);
-    draw_text(&("width1:  ".to_owned() + &eco.layer[1].g_params.2.to_string()), 8., 30.*7., 30., WHITE);
-    draw_circle(0., 50. + (30 * *selection) as f32, 10., RED);
-
-
-    draw_text(&("%: ".to_owned() + &eco.fitness.to_string()), 8., 30.*9., 30., WHITE);
-    draw_text(&("t: ".to_owned() + &eco.cycles.to_string()), 8., 30.*10., 30., WHITE);
-    is_key_down(KeyCode::Q)
-}
-
-fn window_conf() -> Conf {
-    Conf {
-        window_title: "Lenia".to_owned(),
-        fullscreen: false,
-        window_width: MAP_SIZE.0,
-        window_height: MAP_SIZE.1,
-        sample_count: 16,
-        ..Default::default()
-    }
-}
-
-
 // Legacy code
 
         // padding on borders, so convolution will be continous

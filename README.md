@@ -13,6 +13,7 @@ Controls:
  - l - load saved map
  - g - makes current gen best
  - f - ditches current gen
+ - t - toggle autotune
 
 It's learning itself to "not die": there are starting parameters and simulation runs. When it dies ( or is "exploding") it's survival time is saved. If new generation (random changes are introduced) outlives previous, it's parameters are being saved and passed on.
 
