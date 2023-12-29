@@ -51,12 +51,12 @@ impl Ecosystem {
             Layer {
                 size: 92,
                 kernel: Default::default(),
-                g_params: (0.100, 0.118, 0.023),
+                g_params: (0.100, 0.118, 0.013),
             },
             Layer {
                 size: 92,
                 kernel: Default::default(),
-                g_params: (0.100, 0.167, 0.016),
+                g_params: (0.100, 0.167, 0.022),
             },
         ];
         layer[0].kernel = Array2::<f32>::zeros(( (2*layer[0].size+1) as usize, (2*layer[0].size+1) as usize ));
