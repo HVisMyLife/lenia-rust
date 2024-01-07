@@ -1,7 +1,4 @@
-#![allow(clippy::ptr_arg)]
-use rayon::prelude::*;
-use ndarray::{prelude::*, Zip};
-use ndarray_conv::*;
+use ndarray::prelude::*;
 use macroquad::prelude::*;
 use bincode::{serialize, deserialize};
 use std::fs::File;
@@ -10,152 +7,13 @@ use std::io::prelude::*;
 mod fta;
 use fta::FrameTimeAnalyzer;
 
+mod eco;
+use eco::Ecosystem;
+
 
 // size of map for convolution, it is later padded for warp func, so we have to cut it for now
 pub const MAP_SIZE: (i32, i32) = (1280, 820);
 pub const SEED: u64 = 1;
-
-struct Layer {
-    size: i32,
-    kernel: Array2<f32>,
-    pub g_params: (f32,f32,f32), // dt, g-center, g-width ( 0-100 neighbourhood )
-}
-
-struct Ecosystem {
-    // texture for drawing states
-    texture_slice: Vec<u8>,
-    texture_size: [u16; 2],
-    
-    // main array of states
-    pub map: Array2<f32>,
-
-    // layers
-    pub layer: [Layer; 2],
-
-    pub fitness: f32, // 0 - 2 - 20
-    pub cycles: u32, // 0 - 2 - 20
-}
-
-impl Ecosystem {
-    fn new() -> Self {
-
-        // generate random starting map
-        let map = Array2::<f32>::zeros((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize));
-        // for y in rand::gen_range((MAP_SIZE.1 as f32/3.0) as i32, MAP_SIZE.1/2)..rand::gen_range(MAP_SIZE.1/2, (MAP_SIZE.1 as f32/1.5) as i32) {
-        //     for x in rand::gen_range((MAP_SIZE.0 as f32/10.0) as i32, MAP_SIZE.0/2)..rand::gen_range(MAP_SIZE.0/2, (MAP_SIZE.0 as f32/1.1) as i32) {
-        //         map[[x as usize, y as usize]] = rand::gen_range(0.0, 1.0);
-        //     }
-        // } 
-
-        let mut layer: [Layer; 2] = [
-            Layer {
-                size: 92,
-                kernel: Default::default(),
-                g_params: (0.100, 0.118, 0.013),
-            },
-            Layer {
-                size: 92,
-                kernel: Default::default(),
-                g_params: (0.100, 0.167, 0.022),
-            },
-        ];
-        layer[0].kernel = Array2::<f32>::zeros(( (2*layer[0].size+1) as usize, (2*layer[0].size+1) as usize ));
-        layer[1].kernel = Array2::<f32>::zeros(( (2*layer[1].size+1) as usize, (2*layer[1].size+1) as usize ));
-        // generate kernel 0
-        for ny in -layer[0].size..=layer[0].size {
-            let d = f32::sqrt((layer[0].size * layer[0].size - ny * ny) as f32) as i32;
-            for nx in -layer[0].size..=layer[0].size {
-                let r = (f32::sqrt((nx.pow(2) + ny.pow(2)) as f32) + 1.0) / layer[0].size as f32;
-    
-                if ny == 0 && nx == 0 || nx < -d || nx > d { layer[0].kernel[[(nx+layer[0].size)as usize, (ny+layer[0].size)as usize]] = 0.0;}
-                else {layer[0].kernel[[(nx+layer[0].size)as usize, (ny+layer[0].size)as usize]] = ( -((r - 0.5)/0.15).powi(2) / 2.0 ).exp();}// kernel shape
-            }
-        }
-        layer[0].kernel /= layer[0].kernel.sum();
-
-        // generate kernel 1
-        for ny in -layer[1].size..=layer[1].size {
-            let d = f32::sqrt((layer[1].size * layer[1].size - ny * ny) as f32) as i32;
-            for nx in -layer[1].size..=layer[1].size {
-                let r = (f32::sqrt((nx.pow(2) + ny.pow(2)) as f32) + 1.0) / layer[0].size as f32;
-    
-                if ny == 0 && nx == 0 || nx < -d || nx > d { layer[1].kernel[[(nx+layer[1].size)as usize, (ny+layer[1].size)as usize]] = 0.0;}
-                else {layer[1].kernel[[(nx+layer[1].size)as usize, (ny+layer[1].size)as usize]] =
-                    ( ( -150. * (r-(3./4.)).powi(2) ).exp() * (1./3.) ) +
-                    ( ( -150. * (r-(1./2.)).powi(2) ).exp() * (2./3.) ) +
-                    ( ( -150. * (r-(1./4.)).powi(2) ).exp() * (1./1.) )
-                    ;}// kernel shape
-
-            }
-        }
-        layer[1].kernel /= layer[1].kernel.sum();
-        
-        Self { 
-
-            texture_slice: [255;  (4 * MAP_SIZE.1 * MAP_SIZE.0) as usize].to_vec(),
-            texture_size: [MAP_SIZE.0 as u16, MAP_SIZE.1 as u16],
-
-            map,
-            layer,
-            fitness: 0.,
-            cycles: 0,
-        }
-    }
-
-    // convert cell value to color spectrum
-    fn calc_img(&mut self) {
-        self.texture_slice.par_chunks_mut(4).enumerate().for_each(|(i, x)| {
-            let col = (self.map[[i%MAP_SIZE.0 as usize, i/MAP_SIZE.0 as usize]] * 255.0) as i32;
-            
-            x[0] = (-(col/4 - 16).pow(2) + 255).clamp(0, 255) as u8; // 3-16
-            x[1] = (-(col/4 - 32).pow(2) + 255).clamp(0, 255) as u8; // 3-44
-            x[2] = (-(col/4 - 48).pow(2) + 255).clamp(0, 255) as u8; // 3-72
-            //x[3] = (col*2).clamp(0, 255) as u8;
-            if col > 0 {x[3] = 255;} else {x[3] = 0;}
-        });
-    }
-
-    fn calc_conv(&mut self) {
-        // fft convolving map using kernel
-        let mut mc0: Array2<f32> = Default::default();
-        let mut mc1: Array2<f32> = Default::default();
-        rayon::join(
-            || {mc0 = self.map.conv_2d_fft(&self.layer[0].kernel, PaddingSize::Same, PaddingMode::Circular).unwrap();}, 
-            || {mc1 = self.map.conv_2d_fft(&self.layer[1].kernel, PaddingSize::Same, PaddingMode::Circular).unwrap();}
-        );
-        
-        // applying growth mapping function
-        Zip::from(&mut self.map)
-            .and(&mc0)
-            .and(&mc1)
-            .par_for_each(|m, &o0, &o1| {
-                *m = (
-                    *m + 
-                    (self.layer[0].g_params.0 * (( -((o0 -self.layer[0].g_params.1) / self.layer[0].g_params.2).powi(2) / 2.0 ).exp() * 2.0 -1.0) + 
-                        self.layer[1].g_params.0 * (( -((o1 -self.layer[1].g_params.1) / self.layer[1].g_params.2).powi(2) / 2.0 ).exp() * 2.0 -1.0)
-                    ) / 2.
-                ).clamp(0.0, 1.0)     // clamping between 0-1: A + dtG(A*K)
-            });
-
-        self.fitness = (self.map.sum()/(MAP_SIZE.0 * MAP_SIZE.1)as f32*10000.).round() / 100.;
-        self.cycles+=1;
-    }
-   
-    fn on_draw(&mut self, pause: &bool){
-        clear_background(Color::from_rgba(24, 24, 24, 255));
-
-        if !pause {
-        //calculating convolution
-            self.calc_conv();
-        // calculating img pixels
-            self.calc_img();
-        }
-
-        // generating texture
-        let tx = Texture2D::from_rgba8(self.texture_size[0], self.texture_size[1], &self.texture_slice);
-        draw_texture(&tx, 0., 0., WHITE);
-    }
-}
 
 struct Best {
     pub g_params: [(f32,f32,f32); 2], // dt, g-center, g-width ( 0-100 neighbourhood )
@@ -188,7 +46,7 @@ async fn main() {
     let mut eco = Ecosystem::new();
     eco.map = load("data.bin");
     let font = macroquad::text::load_ttf_font("font.ttf").await.unwrap();
-    let mut ui = UI::new(font);
+    let mut ui = UI::new(font, &mut eco);
 
     loop {
         eco.on_draw(&ui.pause);
@@ -197,7 +55,7 @@ async fn main() {
     }
 }
 
- struct UI {
+struct UI {
     fta: FrameTimeAnalyzer,
     selection: i32,
     pub pause: bool,
@@ -207,7 +65,7 @@ async fn main() {
 }
 
 impl UI {
-    fn new(font: Font) -> Self {
+    fn new(font: Font, eco: &mut Ecosystem) -> Self {
         
         UI { 
             fta: FrameTimeAnalyzer::new(16), 
@@ -215,14 +73,13 @@ impl UI {
             pause: false, 
             autotune: true,
             best: Best {
-                g_params: [(0.,0.,0.), (0.,0.,0.)],
+                g_params: [eco.layer[0].g_params, eco.layer[1].g_params],
                 cycles: 0,
             },
             font,
         }
     }
     fn execute(&mut self, eco: &mut Ecosystem) -> bool {
-        if self.autotune && (eco.fitness == 0. || eco.fitness > 5.0) {self.best.compare(eco);}
         if is_key_pressed(KeyCode::T) {self.autotune = !self.autotune;} // add to best
         if is_key_pressed(KeyCode::G) {self.best.cycles = 0;} // add to best
         if is_key_pressed(KeyCode::F) {eco.cycles = 0; eco.fitness = 50.} // add to best
@@ -232,6 +89,7 @@ impl UI {
         if is_key_pressed(KeyCode::Up) {self.selection-=1;}
         if is_key_pressed(KeyCode::Down) {self.selection+=1;}
         self.selection = self.selection.clone().clamp(0, 5);
+        if self.autotune && (eco.fitness == 0. || eco.fitness > 5.0) {self.best.compare(eco);}
         let mut change = 0.;
 
         if is_key_pressed(KeyCode::Right) || is_key_pressed(KeyCode::Left) {
