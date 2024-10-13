@@ -7,9 +7,6 @@ use eco::{Ecosystem, Best};
 mod utils;
 use utils::{FrameTimeAnalyzer, load, save};
 
-mod eco;
-use eco::Ecosystem;
-
 
 // size of map for convolution, it is later padded for warp func, so we have to cut it for now
 pub const MAP_SIZE: (i32, i32) = (1280, 820);
