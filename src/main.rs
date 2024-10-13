@@ -1,11 +1,11 @@
-use ndarray::prelude::*;
+//#![allow(clippy::ptr_arg)]
 use macroquad::prelude::*;
-use bincode::{serialize, deserialize};
-use std::fs::File;
-use std::io::prelude::*;
 
-mod fta;
-use fta::FrameTimeAnalyzer;
+mod eco;
+use eco::{Ecosystem, Best};
+
+mod utils;
+use utils::{FrameTimeAnalyzer, load, save};
 
 mod eco;
 use eco::Ecosystem;
@@ -15,41 +15,19 @@ use eco::Ecosystem;
 pub const MAP_SIZE: (i32, i32) = (1280, 820);
 pub const SEED: u64 = 1;
 
-struct Best {
-    pub g_params: [(f32,f32,f32); 2], // dt, g-center, g-width ( 0-100 neighbourhood )
-    pub cycles: u32,
-}
-
-impl Best {
-    pub fn compare(&mut self, eco: &mut Ecosystem) {
-        if eco.fitness > 0.1 {eco.cycles = (eco.cycles as f32 * 0.8) as u32;} //overflow punish
-        if eco.cycles > self.cycles {
-            self.g_params[0] = eco.layer[0].g_params;
-            self.g_params[1] = eco.layer[1].g_params;
-            self.cycles = eco.cycles;
-        }
-        match rand::gen_range(0, 4) {
-            0 => eco.layer[0].g_params.1 = self.g_params[0].1 + rand::gen_range(-0.01, 0.01),
-            1 => eco.layer[0].g_params.2 = self.g_params[0].2 + rand::gen_range(-0.001, 0.001),
-            2 => eco.layer[1].g_params.1 = self.g_params[1].1 + rand::gen_range(-0.01, 0.01),
-            3 => eco.layer[1].g_params.2 = self.g_params[1].2 + rand::gen_range(-0.001, 0.001),
-            _ => {},
-        }
-        eco.map = load("data.bin");
-        eco.cycles = 0;
-    }
-}
-
 #[macroquad::main(window_conf)]
 async fn main() {
     rand::srand(SEED);
-    let mut eco = Ecosystem::new();
+    let mut eco = Ecosystem::new((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize));
     eco.map = load("data.bin");
     let font = macroquad::text::load_ttf_font("font.ttf").await.unwrap();
     let mut ui = UI::new(font, &mut eco);
 
     loop {
-        eco.on_draw(&ui.pause);
+        clear_background(Color::from_rgba(24, 24, 24, 255));
+        let rtx = eco.run(&ui.pause);
+        let tx = Texture2D::from_rgba8(*rtx.0, *rtx.1, rtx.2);
+        draw_texture(&tx, 0., 0., WHITE);
         if ui.execute(&mut eco) {break};
         next_frame().await
     }
@@ -80,6 +58,12 @@ impl UI {
         }
     }
     fn execute(&mut self, eco: &mut Ecosystem) -> bool {
+        if self.autotune && (eco.fitness == 0. || eco.fitness > 5.0) {
+            if self.best.compare(eco) { 
+                save("data.bin", &eco.map);
+            }
+            eco.map = load("data.bin");
+        }
         if is_key_pressed(KeyCode::T) {self.autotune = !self.autotune;} // add to best
         if is_key_pressed(KeyCode::G) {self.best.cycles = 0;} // add to best
         if is_key_pressed(KeyCode::F) {eco.cycles = 0; eco.fitness = 50.} // add to best
@@ -145,28 +129,6 @@ fn window_conf() -> Conf {
     }
 }
 
-// save nn to file
-fn save(path: &str, data: &Array2<f32>) {        
-    // convert simplified nn to Vec<u8>
-    let encoded: Vec<u8> = serialize(
-        data
-    ).unwrap();
- 
-    // open file and write whole Vec<u8>
-    let mut file = File::create(path).unwrap();
-    file.write_all(&encoded).unwrap();
-} 
- 
-// load nn from file
-fn load(path: &str) -> Array2<f32> {
-    // convert readed Vec<u8> to plain nn
-    let mut buffer = vec![];
-    let mut file = File::open(path).unwrap();
-    file.read_to_end(&mut buffer).unwrap();
-    let decoded: Array2<f32> = deserialize(&buffer).unwrap();
- 
-    decoded
-} 
 // Legacy code
 
         // padding on borders, so convolution will be continous
