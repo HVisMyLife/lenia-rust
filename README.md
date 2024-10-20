@@ -1,7 +1,5 @@
 # lenia-rust
-Lenia written in rust.
-
-Work in progress...
+Lenia universe written in rust.
 
 It's just implementation from this doc: https://arxiv.org/pdf/2005.03742.pdf
 
@@ -16,6 +14,12 @@ Controls:
  - t - toggle autotune
 
 It's learning itself to "not die": there are starting parameters and simulation runs. When it dies ( or is "exploding") it's survival time is saved. If new generation (random changes are introduced) outlives previous, it's parameters are being saved and passed on.
+
+Growth map function parameters and kernel radiuses are beeing saved to .toml and matrix values to .bin. 
+The implementation is awful, but it works and I couldn't care less xD.
+Changing kernel sizes is not supported on the fly ( lookup table need to be regenerated each time ), so at the time there are not present in UI.
+
+Features ideas are greatly appreciated.
 
 ![example](https://github.com/HVisMyLife/lenia-rust/blob/master/recording.gif)
 
