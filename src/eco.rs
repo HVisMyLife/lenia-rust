@@ -141,7 +141,7 @@ impl Ecosystem {
 
 
 pub struct Layer {
-    size: i32,
+    pub size: i32,
     kernel: Array2<f32>,
     pub g_params: (f32,f32,f32), // dt, g-center, g-width ( 0-100 neighbourhood )
 }

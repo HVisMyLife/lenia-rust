@@ -16,7 +16,6 @@ pub const SEED: u64 = 1;
 async fn main() {
     rand::srand(SEED);
     let mut eco = Ecosystem::new((MAP_SIZE.0 as usize, MAP_SIZE.1 as usize));
-    eco.map = load("data.bin");
     let font = macroquad::text::load_ttf_font("font.ttf").await.unwrap();
     let mut ui = UI::new(font, &mut eco);
 
@@ -46,7 +45,7 @@ impl UI {
             fta: FrameTimeAnalyzer::new(16), 
             selection: 0, 
             pause: false, 
-            autotune: true,
+            autotune: false,
             best: Best {
                 g_params: [eco.layer[0].g_params, eco.layer[1].g_params],
                 cycles: 0,
@@ -57,16 +56,45 @@ impl UI {
     fn execute(&mut self, eco: &mut Ecosystem) -> bool {
         if self.autotune && (eco.fitness == 0. || eco.fitness > 5.0) {
             if self.best.compare(eco) { 
-                save("data.bin", &eco.map);
+                save("data/data", ( 
+                    &eco.map, 
+                    [
+                        (eco.layer[0].size, eco.layer[0].g_params),
+                        (eco.layer[1].size, eco.layer[1].g_params)
+                    ] 
+                ) );
             }
-            eco.map = load("data.bin");
+            ( 
+                eco.map, 
+                [
+                    (eco.layer[0].size, eco.layer[0].g_params),
+                    (eco.layer[1].size, eco.layer[1].g_params)
+                ] 
+            ) = load("data/data");
         }
-        if is_key_pressed(KeyCode::T) {self.autotune = !self.autotune;} // add to best
-        if is_key_pressed(KeyCode::G) {self.best.cycles = 0;} // add to best
-        if is_key_pressed(KeyCode::F) {eco.cycles = 0; eco.fitness = 50.} // add to best
+        if is_key_pressed(KeyCode::T) {self.autotune = !self.autotune;}  // enable autotune
+        if is_key_pressed(KeyCode::G) {self.best.cycles = 0;} // reset best score, current better
+        if is_key_pressed(KeyCode::F) {eco.cycles = 0; eco.fitness = 50.} // reset current score
         if is_key_pressed(KeyCode::A) {self.pause = !self.pause;}
-        if is_key_pressed(KeyCode::S) {save("data.bin", &eco.map);}
-        if is_key_pressed(KeyCode::L) {eco.map = load("data.bin");}
+        if is_key_pressed(KeyCode::S) {
+            save("data/data", ( 
+                    &eco.map, 
+                    [
+                        (eco.layer[0].size, eco.layer[0].g_params),
+                        (eco.layer[1].size, eco.layer[1].g_params)
+                    ] 
+                ) );
+        } // save current gen
+        if is_key_pressed(KeyCode::L) { // load saved gen
+            ( 
+                eco.map, 
+                [
+                    (eco.layer[0].size, eco.layer[0].g_params),
+                    (eco.layer[1].size, eco.layer[1].g_params)
+                ] 
+            ) = load("data/data");
+        }
+        // paramenters menu interactions
         if is_key_pressed(KeyCode::Up) {self.selection-=1;}
         if is_key_pressed(KeyCode::Down) {self.selection+=1;}
         self.selection = self.selection.clone().clamp(0, 5);
