@@ -1,5 +1,5 @@
 delta = 0.10000000149011612
-size = [1280, 820]
+size = [896, 896]
 cycles = 0
 fitness = 0.0
 
@@ -7,14 +7,14 @@ fitness = 0.0
 channel_id = 0
 
 [layer.kernel]
-radius = 92
+radius = 64
 shape = "GaussianBump"
 centering = false
 parameters = [0.5, 0.15000000596046448]
 destiny = "Kernel"
 
 [layer.growth_map]
-radius = 92
+radius = 64
 shape = "GaussianBump"
 centering = true
 parameters = [0.15000000596046448, 0.019999999552965164]
@@ -24,14 +24,14 @@ destiny = "GrowthMap"
 channel_id = 0
 
 [layer.kernel]
-radius = 92
+radius = 64
 shape = "TripleBump"
 centering = false
 parameters = []
 destiny = "Kernel"
 
 [layer.growth_map]
-radius = 92
+radius = 64
 shape = "GaussianBump"
 centering = true
 parameters = [0.15000000596046448, 0.019999999552965164]

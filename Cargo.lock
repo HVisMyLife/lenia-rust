@@ -226,7 +226,6 @@ dependencies = [
  "ndarray",
  "ndarray-conv",
  "ndarray-ndimage",
- "rand",
  "rayon",
  "serde",
  "toml",

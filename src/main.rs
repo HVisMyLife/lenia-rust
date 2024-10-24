@@ -12,44 +12,62 @@ use toml;
 use utils::FrameTimeAnalyzer;
 
 mod lenia;
-use lenia::{Eco, Function};
+use lenia::{Channel, Eco, Function, Layer, Shape, Destiny};
 
-// TODO: loading save into ecosystem, ui value modification, ui fitness graph, tuning AI
+// TODO: UI with fitness graph, tuning AI
 
+fn creator(size: (usize, usize)) -> Eco {
+    let mut eco = Eco::new((size.0, size.1), 0.1, 0, vec![], vec![]);
+    let mut matrix = Array2::<f32>::zeros(size);
 
-// size of map for convolution, it is later padded for warp func, so we have to cut it for now
-pub const MAP_SIZE: (usize, usize) = (1280, 820);
-pub const SEED: u64 = 1;
+    // generate random starting point
+    for x in (size.0 as f32 * 0.3)as usize..(size.0 as f32 * 0.6)as usize{ 
+        for y in (size.1 as f32 * 0.3)as usize..(size.1 as f32 * 0.6)as usize{ 
+            matrix[[x as usize, y as usize]] = rand::gen_range(0.0,1.0);
+        }
+    } 
+    eco.channels.push( Channel::new(matrix) );
+
+    eco.layers.push(
+        Layer::new(
+            Function::new(64, Shape::GaussianBump, false, Some(vec![0.5, 0.15]), Some(Destiny::Kernel)), 
+            Function::new(64, Shape::GaussianBump, true, Some(vec![0.15, 0.02]), Some(Destiny::GrowthMap)), 
+            0
+        ) 
+    );
+    eco.layers.push(
+        Layer::new(
+            Function::new(64, Shape::TripleBump, false, None, Some(Destiny::Kernel)), 
+            Function::new(64, Shape::GaussianBump, true, Some(vec![0.15, 0.02]), Some(Destiny::GrowthMap)), 
+            0
+        ) 
+    );
+    eco
+}
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    rand::srand(SEED);
+    let window_size: (usize, usize) = (1024- (64*2), 1024- (64*2) );
     let font = macroquad::text::load_ttf_font("font.ttf").await.unwrap();
 
-    let mut eco = Eco::new((MAP_SIZE.0, MAP_SIZE.1), vec![], vec![]);
+    let mut eco = creator(window_size);
     eco.init();
 
     // LOGGER
     let mut logger = Logger::new();
-    let mut layer_data: Vec<LayerData> = vec![];
-    eco.layers.iter().for_each(|l|{
-        layer_data.push(LayerData {
-            kernel: l.kernel.clone(), growth_map: l.growth_map.clone(), channel_id: l.channel_id
-        });
-    });
-    let toml_data = TomlData {
-        delta: eco.delta, size: MAP_SIZE, cycles: eco.cycles, fitness: eco.fitness, layer: layer_data
-    };
-    let mut matrix_data: Vec<Array2<f32>> = vec![];
-    eco.channels.iter().for_each(|ch|{
-        matrix_data.push(ch.matrix.clone());
-    });
-    logger.load();
-    logger.push_instance(toml_data, matrix_data);
-    logger.save();
+    logger.load_from_file();
+    logger.push_instance(eco.clone());
+    logger.update_instance(0, eco.clone());
+    logger.pop_instance(0);
+    logger.push_instance(eco.clone());
+    eco = logger.get_instance(0).unwrap();
+    eco.init();
+    logger.save_to_file();
     // LOGGER
 
     let mut ui = UI::new(font);
+
+    request_new_screen_size(window_size.0 as f32, window_size.1 as f32);
 
     loop {
         clear_background(Color::from_rgba(24, 24, 24, 255));
@@ -68,13 +86,13 @@ async fn main() {
 
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct LayerData {
     kernel: Function,
     growth_map: Function,
     channel_id: usize,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct TomlData {
     delta: f32,
     size: (usize, usize),
@@ -94,18 +112,63 @@ impl Logger {
     }
 
     // returns pushed instance index
-    fn push_instance(&mut self, toml: TomlData, matrix: Vec<Array2<f32>>) -> usize {
+    fn push_instance(&mut self, eco: Eco) -> usize {
+        let mut matrix = vec![];
+        eco.channels.iter().for_each(|ch|{
+            matrix.push(ch.matrix.clone());
+        });
+        let toml;
+        let mut layer_data = vec![];
+        eco.layers.iter().for_each(|l|{
+            layer_data.push(LayerData {
+                kernel: l.kernel.clone(), growth_map: l.growth_map.clone(), channel_id: l.channel_id
+            });
+        });
+        toml = TomlData {
+            delta: eco.delta, size: eco.size, cycles: eco.cycles, fitness: eco.fitness, layer: layer_data
+        };
         self.instances.push((toml, matrix));
         self.instances.len() - 1
     }
 
-    fn get_instance(&self, idx: usize) -> &(TomlData, Vec<Array2<f32>>) {
-        &self.instances[idx]
+    // Get eco from index, if index doesn't exists, returns None
+    fn get_instance(&self, idx: usize) -> Option<Eco> {
+        match self.instances.get(idx) {
+            Some(_) => {}
+            None => return None
+        }
+        let toml = &self.instances[idx].0;
+        let matrix = &self.instances[idx].1;
+        let mut channels = vec![];
+        matrix.iter().for_each(|m|{
+            channels.push(Channel::new(m.clone()));
+        });
+        let mut layers = vec![];
+        toml.layer.iter().for_each(|l|{
+            layers.push(Layer::new(l.kernel.clone(), l.growth_map.clone(), l.channel_id));
+        });
+        Some(Eco::new(toml.size, toml.delta, toml.cycles, channels, layers))
     }
 
-    // overwrites old saves, so it's recommended to load before saving
-    fn save(&self) {
-        fs::remove_dir_all("data").unwrap();
+    // Return false if there is no instance at index
+    fn update_instance(&mut self, idx: usize, eco: Eco) -> bool {
+        if idx >= self.instances.len() {return false;}
+        self.push_instance(eco);
+        self.instances[idx] = self.instances.last().unwrap().clone();
+        self.instances.pop();
+        true
+    }
+
+    // Return false if there is no instance at index
+    fn pop_instance(&mut self, idx: usize) -> bool {
+        if idx >= self.instances.len() {return false;}
+        self.instances.remove(idx);
+        true
+    }
+
+    // overwrites old saves, so it's recommended to load before saving, returns amount of records
+    fn save_to_file(&self) -> usize {
+        let _ = fs::remove_dir_all("data");
         self.instances.iter().enumerate().for_each(|(i, s)|{
             let path = "data/save".to_owned() + &i.to_string();
             fs::create_dir_all(path.clone()).unwrap();
@@ -119,13 +182,17 @@ impl Logger {
             let mut file = File::create(path + "/toml.toml").unwrap();
             file.write(toml.as_bytes()).unwrap();
         });
+        self.instances.len()
     }
 
-    fn load(&mut self) {
+    // returns amount of loaded instances
+    fn load_from_file(&mut self) -> usize {
         self.instances.clear();
-        let mut entries = fs::read_dir("data/").unwrap()
-            .map(|res| res.map(|e| e.path()))
-            .collect::<Result<Vec<_>, std::io::Error>>().unwrap();
+        let dir = match fs::read_dir("data/") {
+            Ok(d) => d,
+            Err(_) => return 0,
+        };
+        let mut entries = dir.map(|res| res.map(|e| e.path())).collect::<Result<Vec<_>, std::io::Error>>().unwrap();
         entries.sort_unstable();
         let entries = entries.iter().filter(|e| e.is_dir() && e.file_name().unwrap().to_string_lossy().contains("save") ).collect::<Vec<_>>();
         entries.iter().for_each(|e|{
@@ -149,6 +216,7 @@ impl Logger {
             });
             self.instances.push((toml_data, matrix));
         });
+        self.instances.len()
     }
 }
 
@@ -197,8 +265,8 @@ fn window_conf() -> Conf {
     Conf {
         window_title: "Lenia".to_owned(),
         fullscreen: false,
-        window_width: MAP_SIZE.0 as i32,
-        window_height: MAP_SIZE.1 as i32,
+        window_width: 1024,
+        window_height: 1024,
         sample_count: 16,
         ..Default::default()
     }

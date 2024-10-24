@@ -1,16 +1,15 @@
-use rand::Rng;
 use ndarray::prelude::*;
 use ndarray_conv::*;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Shape {
     GaussianBump, // width, offset
     TripleBump,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Destiny {
     Kernel,
     GrowthMap,
@@ -19,7 +18,7 @@ pub enum Destiny {
 
 // Kernel and growth functions are the same, only diffrence is that, growth function x changes with
 // pi*r^2. Delta can be applied later
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Function {
     pub radius: usize,
     pub shape: Shape,
@@ -70,7 +69,7 @@ impl Function {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Layer {
     pub kernel: Function,
     kernel_lookup: Array2<f32>,
@@ -80,7 +79,7 @@ pub struct Layer {
 }
 
 impl Layer {
-    fn new(
+    pub fn new(
         kernel: Function,
         growth_map: Function,
         channel_id: usize
@@ -113,7 +112,7 @@ impl Layer {
 }
 
 // Array3 ????? Could be xddd
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Channel {
     pub matrix: Array2<f32>,
     matrix_out: Array2<f32>,
@@ -121,7 +120,7 @@ pub struct Channel {
 }
 
 impl Channel {
-    fn new(matrix: Array2<f32>) -> Self {
+    pub fn new(matrix: Array2<f32>) -> Self {
         Self { 
             matrix_out: Array2::<f32>::zeros(matrix.dim()),
             matrix, 
@@ -141,7 +140,7 @@ impl Channel {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Eco {
     pub channels: Vec<Channel>,
     pub layers: Vec<Layer>,
@@ -153,41 +152,16 @@ pub struct Eco {
 }
 
 impl Eco {
-    pub fn new(size: (usize, usize), channels: Vec<Channel>, layers: Vec<Layer>) -> Self {
+    pub fn new(size: (usize, usize), delta: f32, cycles: usize, channels: Vec<Channel>, layers: Vec<Layer>) -> Self {
 
         Self { channels, layers, 
-            delta: 0.1, size, 
+            delta, size, 
             texture_slice: vec![255; 4*size.0*size.1], 
-            cycles: 0, fitness: 0. 
+            cycles, fitness: 0.
         }
     }
 
     pub fn init(&mut self) {
-        let mut matrix = Array2::<f32>::zeros(self.size);
-
-        // generate random starting point
-        for x in (self.size.0 as f32 * 0.3)as usize..(self.size.0 as f32 * 0.6)as usize{ 
-            for y in (self.size.1 as f32 * 0.3)as usize..(self.size.1 as f32 * 0.6)as usize{ 
-                matrix[[x as usize, y as usize]] = rand::thread_rng().gen_range(0.0..1.0);
-            }
-        } 
-        self.channels.push( Channel::new(matrix) );
-
-        self.layers.push(
-            Layer::new(
-                Function::new(92, Shape::GaussianBump, false, Some(vec![0.5, 0.15]), Some(Destiny::Kernel)), 
-                Function::new(92, Shape::GaussianBump, true, Some(vec![0.15, 0.02]), Some(Destiny::GrowthMap)), 
-                0
-            ) 
-        );
-        self.layers.push(
-            Layer::new(
-                Function::new(92, Shape::TripleBump, false, None, Some(Destiny::Kernel)), 
-                Function::new(92, Shape::GaussianBump, true, Some(vec![0.15, 0.02]), Some(Destiny::GrowthMap)), 
-                0
-            ) 
-        );
-
         self.layers.par_iter_mut().for_each(|l|{
             l.generate_kernel_lookup();
         });
