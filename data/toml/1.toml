@@ -1,10 +1,11 @@
+uid = "5f2cKVz4SK-jLgOUD7bCgg"
 delta = 0.10000000149011612
 size = [896, 896]
 cycles = 0
 fitness = 0.0
 
 [[layer]]
-channel_id = 0
+matrix_id = "8vohrcG4QmCuDYrZ5jICCA"
 
 [layer.kernel]
 radius = 64
@@ -17,11 +18,11 @@ destiny = "Kernel"
 radius = 64
 shape = "GaussianBump"
 centering = true
-parameters = [0.15000000596046448, 0.019999999552965164]
+parameters = [0.15000000596046448, 0.029999999329447746]
 destiny = "GrowthMap"
 
 [[layer]]
-channel_id = 0
+matrix_id = "8vohrcG4QmCuDYrZ5jICCA"
 
 [layer.kernel]
 radius = 64

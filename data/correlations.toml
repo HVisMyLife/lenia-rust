@@ -1,0 +1,20 @@
+[[correlation]]
+uid = "sr6X529DRyGIS1bqOSydCg"
+nick = "idk"
+toml = "G6T9ZrZyTViSVGDNtBGc7A"
+matrix = ["FqRVGF8cRNq7tt499KLiMw"]
+active = true
+
+[[correlation]]
+uid = "bv3vbNEgRh2arHVmzi1lMw"
+nick = "idk"
+toml = "5f2cKVz4SK-jLgOUD7bCgg"
+matrix = ["8vohrcG4QmCuDYrZ5jICCA"]
+active = true
+
+[[correlation]]
+uid = "sYRa_dIVQo6rX2wzTy85AA"
+nick = "idk"
+toml = "EXj6dAh8T-y_4YGJZcx21Q"
+matrix = ["Wgp-CW9sSB-fUwmZXmNJVg", "XAymFDbPQXGuDsw57d9NRA", "kIHGmq_8REybaHlpviI16A"]
+active = true

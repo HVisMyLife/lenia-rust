@@ -1,0 +1,73 @@
+uid = "EXj6dAh8T-y_4YGJZcx21Q"
+delta = 0.10000000149011612
+size = [896, 896]
+cycles = 0
+fitness = 0.0
+
+[[layer]]
+matrix_id = "Wgp-CW9sSB-fUwmZXmNJVg"
+
+[layer.kernel]
+radius = 64
+shape = "GaussianBump"
+centering = false
+parameters = [0.5, 0.15000000596046448]
+destiny = "Kernel"
+
+[layer.growth_map]
+radius = 64
+shape = "GaussianBump"
+centering = true
+parameters = [0.15000000596046448, 0.029999999329447746]
+destiny = "GrowthMap"
+
+[[layer]]
+matrix_id = "Wgp-CW9sSB-fUwmZXmNJVg"
+
+[layer.kernel]
+radius = 64
+shape = "TripleBump"
+centering = false
+parameters = []
+destiny = "Kernel"
+
+[layer.growth_map]
+radius = 64
+shape = "GaussianBump"
+centering = true
+parameters = [0.15000000596046448, 0.019999999552965164]
+destiny = "GrowthMap"
+
+[[layer]]
+matrix_id = "XAymFDbPQXGuDsw57d9NRA"
+
+[layer.kernel]
+radius = 64
+shape = "GaussianBump"
+centering = false
+parameters = [0.5, 0.15000000596046448]
+destiny = "Kernel"
+
+[layer.growth_map]
+radius = 64
+shape = "GaussianBump"
+centering = true
+parameters = [0.15000000596046448, 0.029999999329447746]
+destiny = "GrowthMap"
+
+[[layer]]
+matrix_id = "kIHGmq_8REybaHlpviI16A"
+
+[layer.kernel]
+radius = 64
+shape = "GaussianBump"
+centering = false
+parameters = [0.5, 0.15000000596046448]
+destiny = "Kernel"
+
+[layer.growth_map]
+radius = 64
+shape = "GaussianBump"
+centering = true
+parameters = [0.15000000596046448, 0.029999999329447746]
+destiny = "GrowthMap"

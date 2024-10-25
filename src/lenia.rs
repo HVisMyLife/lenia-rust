@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use ndarray::prelude::*;
 use ndarray_conv::*;
 use rayon::prelude::*;
@@ -146,7 +147,6 @@ pub struct Eco {
     pub layers: Vec<Layer>,
     pub delta: f32,
     pub size: (usize, usize),
-    texture_slice: Vec<u8>,
     pub cycles: usize,
     pub fitness: f32,
 }
@@ -156,7 +156,6 @@ impl Eco {
 
         Self { channels, layers, 
             delta, size, 
-            texture_slice: vec![255; 4*size.0*size.1], 
             cycles, fitness: 0.
         }
     }
@@ -189,17 +188,4 @@ impl Eco {
         self.fitness /= self.channels.len() as f32;
     }
 
-    pub fn image(&mut self) -> (&(usize, usize), &Vec<u8>) {
-        
-        self.texture_slice.par_chunks_mut(4).enumerate().for_each(|(i, x)|{
-            let col = (self.channels[0].matrix[[i%self.size.0, i/self.size.0]] * 255.0) as isize;
-            
-            x[0] = (-(col/4 - 16).pow(2) + 255).clamp(0, 255) as u8; // 3-16
-            x[1] = (-(col/4 - 32).pow(2) + 255).clamp(0, 255) as u8; // 3-44
-            x[2] = (-(col/4 - 48).pow(2) + 255).clamp(0, 255) as u8; // 3-72
-            //x[3] = (col*2).clamp(0, 255) as u8;
-            if col > 0 {x[3] = 255;} else {x[3] = 0;}
-        });
-        (&self.size, &self.texture_slice)
-    }
 }

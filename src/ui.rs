@@ -1,4 +1,4 @@
-use crate::utils::FrameTimeAnalyzer;
+use crate::{lenia::Eco, logger::Logger, utils::FrameTimeAnalyzer};
 use macroquad::prelude::*;
 
 pub struct UI {
@@ -18,8 +18,18 @@ impl UI {
         }
     }
 
-    pub fn execute(&mut self) -> bool {
+    pub fn execute(&mut self, uid: &String, eco: &mut Eco, logger: &mut Logger) -> bool {
         if is_key_pressed(KeyCode::A) {self.pause = !self.pause;}
+        
+        if is_key_pressed(KeyCode::R) {eco.layers[0].growth_map.parameters[0] += 0.01;}  // width
+        if is_key_pressed(KeyCode::E) {eco.layers[0].growth_map.parameters[0] -= 0.01;}
+        if is_key_pressed(KeyCode::F) {eco.layers[0].growth_map.parameters[1] += 0.002;}  // offset
+        if is_key_pressed(KeyCode::D) {eco.layers[0].growth_map.parameters[1] -= 0.002;}
+
+        if is_key_pressed(KeyCode::S) { logger.save_to_file(); }
+        if is_key_pressed(KeyCode::L) { logger.load_from_file(); }
+        if is_key_pressed(KeyCode::U) { logger.update_correlation(uid, &eco, (true, true)); }
+        
         let mut tp = TextParams { 
             font: Some(&self.font), 
             font_size: 30, 
@@ -39,3 +49,5 @@ impl UI {
         is_key_down(KeyCode::Q)
     }
 }
+
+// id for everyone, needs to be uniqe
