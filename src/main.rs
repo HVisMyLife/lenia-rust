@@ -67,20 +67,23 @@ fn _creator(size: (usize, usize)) -> Eco {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let window_size: (usize, usize) = (1024- (64*2), 1024- (64*2) );
+    let _window_size: (usize, usize) = (1024- (64*2), 1024- (64*2) );
+    let ui_offset = 512.;
     let font = macroquad::text::load_ttf_font("font.ttf").await.unwrap();
 
     // LOGGER
     let mut logger = Logger::new();
     logger.load_from_file();
-    let uid = "sr6X529DRyGIS1bqOSydCg".to_string();
+    //let uid = "sr6X529DRyGIS1bqOSydCg".to_string();
+    let uid = "sr6X529DRyGIS1bqOSydCR".to_string();
+    //let uid = "sYRa_dIVQo6rX2wzTy85AA".to_string();
     let mut eco = logger.get_correlation(&uid).unwrap();
     eco.init();
     // LOGGER
 
     let mut ui = UI::new(font);
 
-    request_new_screen_size(window_size.0 as f32, window_size.1 as f32);
+    request_new_screen_size(1024. - (64.*2.) + ui_offset, 1024.);
 
     loop {
         clear_background(Color::from_rgba(24, 24, 24, 255));
@@ -90,7 +93,11 @@ async fn main() {
 
         let rtx = logger.image(&eco.channels[0].matrix);       
         let tx = Texture2D::from_rgba8(rtx.0.0 as u16, rtx.0.1 as u16, rtx.1);
-        draw_texture(&tx, 0., 0., WHITE);
+        draw_texture(&tx, ui_offset, 0., WHITE);
+        //draw_texture_ex(&tx, ui_offset, 0., WHITE, DrawTextureParams{
+        //    dest_size: Some(Vec2::new(1080., 1080.)),
+        //    ..Default::default()
+        //});
 
         if ui.execute(&uid, &mut eco, &mut logger) {break};
         next_frame().await

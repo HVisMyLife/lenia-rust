@@ -1,0 +1,22 @@
+uid = "klMB8IE5RCO2SFlW5NHQdA"
+delta = 0.10000000149011612
+size = [896, 896]
+cycles = 4218
+fitness = 0.0
+
+[[layer]]
+matrix_id = "GR_w26tuSfanGyj5qhFyVw"
+
+[layer.kernel]
+radius = 64
+shape = "GaussianBump"
+centering = false
+parameters = [0.5, 0.15000000596046448]
+destiny = "Kernel"
+
+[layer.growth_map]
+radius = 64
+shape = "GaussianBump"
+centering = true
+parameters = [0.30000001192092896, 0.035999998450279236]
+destiny = "GrowthMap"

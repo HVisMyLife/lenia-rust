@@ -1,20 +1,13 @@
 [[correlation]]
 uid = "sr6X529DRyGIS1bqOSydCg"
 nick = "idk"
-toml = "G6T9ZrZyTViSVGDNtBGc7A"
-matrix = ["FqRVGF8cRNq7tt499KLiMw"]
+toml = "klMB8IE5RCO2SFlW5NHQdA"
+matrix = ["GR_w26tuSfanGyj5qhFyVw"]
 active = true
 
 [[correlation]]
-uid = "bv3vbNEgRh2arHVmzi1lMw"
+uid = "sr6X529DRyGIS1bqOSydCR"
 nick = "idk"
-toml = "5f2cKVz4SK-jLgOUD7bCgg"
-matrix = ["8vohrcG4QmCuDYrZ5jICCA"]
-active = true
-
-[[correlation]]
-uid = "sYRa_dIVQo6rX2wzTy85AA"
-nick = "idk"
-toml = "EXj6dAh8T-y_4YGJZcx21Q"
-matrix = ["Wgp-CW9sSB-fUwmZXmNJVg", "XAymFDbPQXGuDsw57d9NRA", "kIHGmq_8REybaHlpviI16A"]
+toml = "9T8ZBy0cRY6zxuYIEctIMQ"
+matrix = ["QIS_7OgJRi2Paa0f8E0foA"]
 active = true

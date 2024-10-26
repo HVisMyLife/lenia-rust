@@ -1,11 +1,11 @@
-uid = "G6T9ZrZyTViSVGDNtBGc7A"
+uid = "9T8ZBy0cRY6zxuYIEctIMQ"
 delta = 0.10000000149011612
 size = [896, 896]
-cycles = 0
+cycles = 1936
 fitness = 0.0
 
 [[layer]]
-matrix_id = "FqRVGF8cRNq7tt499KLiMw"
+matrix_id = "QIS_7OgJRi2Paa0f8E0foA"
 
 [layer.kernel]
 radius = 64
@@ -18,5 +18,5 @@ destiny = "Kernel"
 radius = 64
 shape = "GaussianBump"
 centering = true
-parameters = [0.15000000596046448, 0.029999999329447746]
+parameters = [0.2500000596046448, 0.023999998345971107]
 destiny = "GrowthMap"

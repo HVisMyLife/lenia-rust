@@ -8,6 +8,7 @@ use toml;
 use ndarray::prelude::*;
 use rayon::prelude::*;
 use unique_id::{Generator, string::StringGenerator};
+use macroquad::prelude::*;
 
 use crate::lenia::{Channel, Eco, Function, Layer};
 
@@ -241,7 +242,7 @@ impl Logger {
     }
 
     // overwrites old saves, so it's recommended to load before saving, returns amount of records
-    pub fn save_to_file(&self) -> (usize, usize, usize) {
+    pub fn save_to_file(&mut self) -> (usize, usize, usize) {
         let _ = fs::remove_dir_all("data");
         let path = "data".to_owned();
         fs::create_dir_all(path.clone()).unwrap();
@@ -253,16 +254,21 @@ impl Logger {
 
         let path = "data/toml".to_owned();
         fs::create_dir_all(path.clone()).unwrap();
-        self.tomls.iter().enumerate().for_each(|(i, t)|{
+        self.tomls.iter().for_each(|t|{
             let toml = toml::to_string(&t).unwrap();
-            let mut file = File::create(path.clone() + "/" + &i.to_string() + ".toml").unwrap();
+            let mut file = File::create(path.clone() + "/" + &t.uid.to_string() + ".toml").unwrap();
             file.write(toml.as_bytes()).unwrap();
         });
         let path = "data/matrix".to_owned();
         fs::create_dir_all(path.clone()).unwrap();
-        self.matrices.iter().enumerate().for_each(|(i, m)|{
+        self.matrices.clone().iter().for_each(|m|{
+            let rtx = self.image(&m.matrix.clone());
+            let tx = Texture2D::from_rgba8(rtx.0.0 as u16, rtx.0.1 as u16, rtx.1);
+            let img = tx.get_texture_data();
+            img.export_png(&(path.clone() + "/" + &m.uid.to_string() + ".png"));
+            
             let serialized: Vec<u8> = serialize(m).unwrap();
-            let mut file = File::create(path.clone() + "/" + &i.to_string() + ".bin").unwrap();
+            let mut file = File::create(path.clone() + "/" + &m.uid.to_string() + ".bin").unwrap();
             file.write_all(&serialized).unwrap();
         });
         (self.correlations.correlation.len(), self.tomls.len(), self.matrices.len())

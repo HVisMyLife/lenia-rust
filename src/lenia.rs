@@ -3,14 +3,15 @@ use ndarray::prelude::*;
 use ndarray_conv::*;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use strum::Display;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display)]
 pub enum Shape {
     GaussianBump, // width, offset
     TripleBump,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display)]
 pub enum Destiny {
     Kernel,
     GrowthMap,
@@ -185,7 +186,7 @@ impl Eco {
         self.channels.iter().for_each(|ch|{
             self.fitness += ch.matrix_out.mean().unwrap();
         });
-        self.fitness /= self.channels.len() as f32;
+        self.fitness /= self.channels.len() as f32 * 10000.;
     }
 
 }
