@@ -6,17 +6,14 @@ fitness = 0.0
 
 [[layer]]
 matrix_id = "QIS_7OgJRi2Paa0f8E0foA"
+radius = 64
 
 [layer.kernel]
-radius = 64
 shape = "GaussianBump"
 centering = false
-parameters = [0.5, 0.15000000596046448]
-destiny = "Kernel"
+parameters = [0.15000000596046448, 0.5]
 
 [layer.growth_map]
-radius = 64
 shape = "GaussianBump"
 centering = true
-parameters = [0.2500000596046448, 0.023999998345971107]
-destiny = "GrowthMap"
+parameters = [0.024000000208616257, 0.25]

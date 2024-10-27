@@ -5,7 +5,7 @@ use ndarray::prelude::*;
 mod utils;
 
 mod lenia;
-use lenia::{Channel, Eco, Function, Layer, Shape, Destiny};
+use lenia::{Channel, Eco, Function, Layer, Shape};
 
 mod logger;
 use logger::Logger;
@@ -31,35 +31,20 @@ fn _creator(size: (usize, usize)) -> Eco {
         }
     } 
     eco.channels.push( Channel::new(matrix.clone()) );
-    eco.channels.push( Channel::new(matrix.clone()) );
-    eco.channels.push( Channel::new(matrix.clone()) );
+
+    // width, offset
+    //let mut f = vec![];
+    //f.push( Function::new(64, Shape::GaussianBump, false, vec![0.12, 0.5], Some(Destiny::Kernel)) );
+    //f.push( Function::new(64, Shape::ExponentialDecay, false, vec![0.18, 0.0], Some(Destiny::Kernel)) );
+    //f.push( Function::new(64, Shape::SmoothTransition, false, vec![0.10, 0.5], Some(Destiny::Kernel)) );
+    //f.push( Function::new(64, Shape::MexicanHat, false, vec![0.16, 0.5], Some(Destiny::Kernel)) );
+    //f.push( Function::new(64, Shape::TripleBump, false, vec![0.06, 0.5], Some(Destiny::Kernel)) );
 
     eco.layers.push(
         Layer::new(
-            Function::new(64, Shape::GaussianBump, false, Some(vec![0.5, 0.15]), Some(Destiny::Kernel)), 
-            Function::new(64, Shape::GaussianBump, true, Some(vec![0.15, 0.03]), Some(Destiny::GrowthMap)), 
-            0
-        ) 
-    );
-    eco.layers.push(
-        Layer::new(
-            Function::new(64, Shape::TripleBump, false, None, Some(Destiny::Kernel)), 
-            Function::new(64, Shape::GaussianBump, true, Some(vec![0.15, 0.02]), Some(Destiny::GrowthMap)), 
-            0
-        ) 
-    );
-    eco.layers.push(
-        Layer::new(
-            Function::new(64, Shape::GaussianBump, false, Some(vec![0.5, 0.15]), Some(Destiny::Kernel)), 
-            Function::new(64, Shape::GaussianBump, true, Some(vec![0.15, 0.03]), Some(Destiny::GrowthMap)), 
-            1
-        ) 
-    );
-    eco.layers.push(
-        Layer::new(
-            Function::new(64, Shape::GaussianBump, false, Some(vec![0.5, 0.15]), Some(Destiny::Kernel)), 
-            Function::new(64, Shape::GaussianBump, true, Some(vec![0.15, 0.03]), Some(Destiny::GrowthMap)), 
-            2
+            Function::new(Shape::MexicanHat, false, vec![0.16, 0.5]), 
+            Function::new(Shape::GaussianBump, true, vec![0.12, 0.5]), 
+            0, 64
         ) 
     );
     eco
@@ -67,23 +52,23 @@ fn _creator(size: (usize, usize)) -> Eco {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let _window_size: (usize, usize) = (1024- (64*2), 1024- (64*2) );
+    let window_size: (usize, usize) = (1024- (64*2), 1024- (64*2) );
     let ui_offset = 512.;
     let font = macroquad::text::load_ttf_font("font.ttf").await.unwrap();
 
     // LOGGER
     let mut logger = Logger::new();
     logger.load_from_file();
-    //let uid = "sr6X529DRyGIS1bqOSydCg".to_string();
-    let uid = "sr6X529DRyGIS1bqOSydCR".to_string();
-    //let uid = "sYRa_dIVQo6rX2wzTy85AA".to_string();
-    let mut eco = logger.get_correlation(&uid).unwrap();
+    let mut uid = "sr6X529DRyGIS1bqOSydCR".to_string();
+    let mut eco = _creator(window_size);//logger.get_correlation(&uid).unwrap();
     eco.init();
+    //logger.push_correlation(&eco, "MK".to_string());
+    //logger.save_to_file();
     // LOGGER
 
     let mut ui = UI::new(font);
 
-    request_new_screen_size(1024. - (64.*2.) + ui_offset, 1024.);
+    request_new_screen_size(window_size.0 as f32 + ui_offset, window_size.1 as f32);
 
     loop {
         clear_background(Color::from_rgba(24, 24, 24, 255));
@@ -99,7 +84,7 @@ async fn main() {
         //    ..Default::default()
         //});
 
-        if ui.execute(&uid, &mut eco, &mut logger) {break};
+        if ui.execute(&mut uid, &mut eco, &mut logger) {break};
         next_frame().await
     }
 }

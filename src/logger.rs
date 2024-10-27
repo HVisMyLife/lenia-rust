@@ -17,6 +17,7 @@ struct LayerData {
     kernel: Function,
     growth_map: Function,
     matrix_id: String,
+    radius: usize
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct MatrixData {
@@ -46,7 +47,7 @@ struct TomlCorrelations {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Logger {
     tomls: Vec<TomlData>,
     matrices: Vec<MatrixData>,
@@ -85,7 +86,7 @@ impl Logger {
         let mut layer_data = vec![];
         eco.layers.iter().for_each(|l|{
             layer_data.push(LayerData {
-                kernel: l.kernel.clone(), growth_map: l.growth_map.clone(), matrix_id: matrix_uids[l.channel_id].clone()
+                kernel: l.kernel.clone(), growth_map: l.growth_map.clone(), matrix_id: matrix_uids[l.channel_id].clone(), radius: l.radius
             });
         });
         let uid = self.gen.next_id();
@@ -103,7 +104,7 @@ impl Logger {
     }
 
     // uses eco reference to correlate to toml in list
-    pub fn push_correlation(&mut self, eco: &Eco) -> &String {
+    pub fn push_correlation(&mut self, eco: &Eco, nick: String) -> &String {
         let mut matrix = vec![];
         eco.channels.iter().for_each(|ch|{
             matrix.push(self.push_matrix(&ch.matrix).to_string());
@@ -111,7 +112,7 @@ impl Logger {
         let uid = self.gen.next_id();
         let instance = InstanceData {
             uid,
-            nick: "idk".to_string(),
+            nick,
             toml: self.push_toml(eco, &matrix).to_string(),
             matrix, active: true
         };
@@ -119,10 +120,11 @@ impl Logger {
         &self.correlations.correlation.last().unwrap().uid
     }
 
-    pub fn get_correlation_list(&self) -> Vec<(&String, &String)> {
+    // correlation uid, nick, first matrix uid
+    pub fn get_correlation_list(&self) -> Vec<(String, String, String)> {
         let mut list = vec![];
         self.correlations.correlation.iter().for_each(|c|{
-            list.push((&c.uid, &c.nick));
+            list.push((c.uid.clone(), c.nick.clone(), c.matrix[0].clone()));
         });
         list
     }
@@ -165,7 +167,7 @@ impl Logger {
         let mut layers = vec![];
         toml.layer.iter().for_each(|l|{
             let id = matrix_hashmap.iter().position(|m| *m == l.matrix_id).unwrap();
-            layers.push(Layer::new(l.kernel.clone(), l.growth_map.clone(), id));
+            layers.push(Layer::new(l.kernel.clone(), l.growth_map.clone(), id, l.radius));
         });
         Some(Eco::new(toml.size, toml.delta, toml.cycles, channels, layers))
     }
@@ -193,7 +195,15 @@ impl Logger {
             Some(c) => c,
             None => {return false;}
         };
-        self.push_correlation(eco);
+        self.push_correlation(eco, self.correlations.correlation[real_idx].nick.clone());
+        match self.tomls.iter().position(|t| t.uid == self.correlations.correlation[real_idx].toml) {
+            Some(t) => self.tomls.remove(t),
+            None => return false,
+        };
+        self.correlations.correlation[real_idx].matrix.iter().for_each(|m|{
+            let i = self.matrices.iter().position(|mm| mm.uid == *m).unwrap();
+            self.matrices.remove(i);
+        });
         //self.correlations.correlation[idx] = self.correlations.correlation.last().unwrap().clone();
         if option.0 {
             self.correlations.correlation[real_idx].toml = self.correlations.correlation.last().unwrap().clone().toml;
@@ -237,6 +247,14 @@ impl Logger {
             Some(c) => c,
             None => {return false;}
         };
+        match self.tomls.iter().position(|t| t.uid == self.correlations.correlation[real_idx].toml) {
+            Some(t) => self.tomls.remove(t),
+            None => return false,
+        };
+        self.correlations.correlation[real_idx].matrix.iter().for_each(|m|{
+            let i = self.matrices.iter().position(|mm| mm.uid == *m).unwrap();
+            self.matrices.remove(i);
+        });
         self.correlations.correlation.remove(real_idx);
         true
     }

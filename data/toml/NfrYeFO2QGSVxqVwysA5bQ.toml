@@ -1,0 +1,19 @@
+uid = "NfrYeFO2QGSVxqVwysA5bQ"
+delta = 0.10000000149011612
+size = [896, 896]
+cycles = 633
+fitness = 0.0
+
+[[layer]]
+matrix_id = "N_d5ZzMbTOiJrszfEl6jmA"
+radius = 64
+
+[layer.kernel]
+shape = "MexicanHat"
+centering = false
+parameters = [0.1599999964237213, 0.5]
+
+[layer.growth_map]
+shape = "GaussianBump"
+centering = true
+parameters = [0.034999966621398926, 0.23999987542629242]

@@ -8,60 +8,52 @@ use strum::Display;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display)]
 pub enum Shape {
     GaussianBump, // width, offset
+    ExponentialDecay,
+    SmoothTransition,
+    MexicanHat,
     TripleBump,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display)]
-pub enum Destiny {
-    Kernel,
-    GrowthMap,
-    Misc
 }
 
 // Kernel and growth functions are the same, only diffrence is that, growth function x changes with
 // pi*r^2. Delta can be applied later
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Function {
-    pub radius: usize,
     pub shape: Shape,
     pub centering: bool,  // should it be centered at x (moved down)
     pub parameters: Vec<f32>,  // it will be clamped to 0<>1
-    pub destiny: Destiny
 }
 
 impl Function {
-    pub fn new(radius: usize, shape: Shape, centering: bool, parameters: Option<Vec<f32>>, destiny: Option<Destiny>) -> Self {
+    pub fn new(shape: Shape, centering: bool, parameters: Vec<f32>) -> Self {
         Function {
-            radius,
             shape,
             centering,
-            parameters: parameters.unwrap_or(vec![]),
-            destiny: destiny.unwrap_or(Destiny::Misc),
+            parameters,
         }
     }
 
     pub fn calc(&self, x: f32) -> f32 {
-        let mut x = x;
         let mut y;
 
-        match self.destiny {
-            Destiny::Kernel => {
-                x /= self.radius as f32; 
-                if x > 1. {return 0.;} // it's outside circle region 
-            }, // x must be 0<>1
-            Destiny::GrowthMap => {}// normalizing kernel below x /= self.radius.pow(2) as f32 * PI, // square cube law
-            Destiny::Misc => {}
-        }
-        
+        // 0 - width, 1 - offset
         match self.shape {
             Shape::GaussianBump => {
-                y = ( -( ( x - self.parameters[0]) / self.parameters[1]).powi(2) / 2.0 ).exp();
+                y = ( -( ( x - self.parameters[1]) / self.parameters[0] ).powi(2) / 2. ).exp();
             },
-            Shape::TripleBump => {
-                y = ( ( -150. * (x-(3./4.)).powi(2) ).exp() * (1./3.) ) +
-                ( ( -150. * (x-(1./2.)).powi(2) ).exp() * (2./3.) ) +
-                ( ( -150. * (x-(1./4.)).powi(2) ).exp() * (1./1.) );
-            }
+            Shape::ExponentialDecay => { // comes from infinity, so have to be clamped
+                y = ( -( ( x - self.parameters[1]) / self.parameters[0] ) ).exp().clamp(0., 1.);
+            },
+            Shape::SmoothTransition => {
+                y = 1. / ( 1. + ( ( x - self.parameters[1]) / self.parameters[0] ).exp() );
+            },
+            Shape::MexicanHat => {
+                y = 1. / ( 1. + ( ( ( ( x - self.parameters[1] ) / self.parameters[0] ).powi(2) - 1. ).powi(2) ) );
+            },
+            Shape::TripleBump => { // when wide goes to 2
+                y = ( 0.6 * ( -( ( x - self.parameters[1] + 0.25 ) / self.parameters[0] ).powi(2) ).exp() ) +
+                    ( 0.8 * ( -( ( x - self.parameters[1] + 0.00 ) / self.parameters[0] ).powi(2) ).exp() ) +
+                    ( 0.6 * ( -( ( x - self.parameters[1] - 0.25 ) / self.parameters[0] ).powi(2) ).exp() ).clamp(0., 1.);
+            },
         }
 
         y = y.clamp(0., 1.);
@@ -77,27 +69,29 @@ pub struct Layer {
     kernel_lookup: Array2<f32>,
     pub growth_map: Function,
     pub channel_id: usize, // number of channel that will be used as input
-    matrix_out: Array2<f32>
+    matrix_out: Array2<f32>,
+    pub radius: usize,
 }
 
 impl Layer {
     pub fn new(
         kernel: Function,
         growth_map: Function,
-        channel_id: usize
+        channel_id: usize,
+        radius: usize
     ) -> Self {
-        let r = kernel.radius;
         Layer { 
-            kernel, kernel_lookup: Array2::<f32>::zeros((r * 2 + 1, r * 2 + 1)),
-            growth_map, channel_id, matrix_out: Default::default()
+            kernel, kernel_lookup: Array2::<f32>::zeros((radius * 2 + 1, radius * 2 + 1)),
+            growth_map, channel_id, matrix_out: Default::default(), radius
         }
     }
 
     fn generate_kernel_lookup(&mut self) {
-        for x in -(self.kernel.radius as i64)..=self.kernel.radius as i64 {
-            for y in -(self.kernel.radius as i64)..=self.kernel.radius as i64 {
+        for x in -(self.radius as i64)..=self.radius as i64 {
+            for y in -(self.radius as i64)..=self.radius as i64 {
                 let r = ( (x*x+y*y) as f32 ).sqrt();
-                self.kernel_lookup[[(x+self.kernel.radius as i64) as usize, (y+self.kernel.radius as i64) as usize]] = self.kernel.calc(r);
+                self.kernel_lookup[[(x+self.radius as i64) as usize, (y+self.radius as i64) as usize]] 
+                    = self.kernel.calc(r/self.radius as f32);
             }    
         }
         self.kernel_lookup /= self.kernel_lookup.sum(); // no matter kernel radius, sum off ideal
