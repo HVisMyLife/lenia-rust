@@ -1,4 +1,7 @@
 # lenia-rust
+
+### It's a dev branch for new version, it's uncomparably more "powerful", but still needs polishing, and is generally a work in progress.
+
 Lenia universe written in rust.
 
 It's just implementation from this doc: https://arxiv.org/pdf/2005.03742.pdf
