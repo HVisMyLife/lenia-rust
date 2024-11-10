@@ -1,6 +1,6 @@
 use std::{fs::File, io::prelude::*, time::{Duration, SystemTime}};
 
-use crate::{lenia::Eco, logger::Logger, utils::FrameTimeAnalyzer};
+use crate::{lenia::{Eco, Cycle}, logger::Logger, utils::FrameTimeAnalyzer};
 use macroquad::prelude::*;
 
 
@@ -120,11 +120,6 @@ impl UI {
     fn input_handler(&mut self, uid: &mut String, eco: &mut Eco, logger: &mut Logger) -> bool {
         if is_key_pressed(KeyCode::A) {self.pause = !self.pause;}
         
-        if is_key_pressed(KeyCode::R) {eco.layers[0].growth_map.parameters[0] += 0.01;}  // width
-        if is_key_pressed(KeyCode::E) {eco.layers[0].growth_map.parameters[0] -= 0.01;}
-        if is_key_pressed(KeyCode::F) {eco.layers[0].growth_map.parameters[1] += 0.002;}  // offset
-        if is_key_pressed(KeyCode::D) {eco.layers[0].growth_map.parameters[1] -= 0.002;}
-
         if is_key_pressed(KeyCode::S) { logger.save_to_file(); self.popup.show(&"SAVED".to_string(), None);}
         if is_key_pressed(KeyCode::L) { logger.load_from_file(); self.popup.show(&"LOADED".to_string(), None);}
         if is_key_pressed(KeyCode::U) { 
@@ -251,6 +246,24 @@ impl DynamicDisplay {
         if is_key_pressed(KeyCode::Down) { self.field += 1; }
         if is_key_pressed(KeyCode::Up) { self.field -= 1; }
         self.field = self.field.clamp(0, self.field_max as isize - 1);
+
+        if is_key_pressed(KeyCode::PageUp) {
+            self.field_old = -10;   // force refresh
+            if self.is_kernel {
+                eco.layers[self.layer_num].kernel.shape = eco.layers[self.layer_num].kernel.shape.next();
+            } else {
+                eco.layers[self.layer_num].growth_map.shape = eco.layers[self.layer_num].growth_map.shape.next();
+            }
+        }
+        if is_key_pressed(KeyCode::PageDown) {
+            self.field_old = -10;   // force refresh
+            if self.is_kernel {
+                eco.layers[self.layer_num].kernel.shape = eco.layers[self.layer_num].kernel.shape.previous();
+            } else {
+                eco.layers[self.layer_num].growth_map.shape = eco.layers[self.layer_num].growth_map.shape.previous();
+            }
+        }
+
         if is_key_pressed(KeyCode::Left) || is_key_pressed(KeyCode::Right){
             let mut value = 0.02;
             if self.idx == 0 {value = 0.002;}

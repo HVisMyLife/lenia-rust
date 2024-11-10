@@ -5,6 +5,12 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
+
+pub trait Cycle {
+    fn next(&mut self) -> Self;
+    fn previous(&mut self) -> Self;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display)]
 pub enum Shape {
     GaussianBump, // width, offset
@@ -12,6 +18,27 @@ pub enum Shape {
     SmoothTransition,
     MexicanHat,
     TripleBump,
+}
+
+impl Cycle for Shape {
+    fn next(&mut self) -> Self {
+        match self {
+            Shape::GaussianBump => Shape::ExponentialDecay,
+            Shape::ExponentialDecay => Shape::SmoothTransition,
+            Shape::SmoothTransition => Shape::MexicanHat,
+            Shape::MexicanHat => Shape::TripleBump,
+            Shape::TripleBump => Shape::GaussianBump,
+        }
+    }
+    fn previous(&mut self) -> Self {
+        match self {
+            Shape::GaussianBump => Shape::TripleBump,
+            Shape::ExponentialDecay => Shape::GaussianBump,
+            Shape::SmoothTransition => Shape::ExponentialDecay,
+            Shape::MexicanHat => Shape::SmoothTransition,
+            Shape::TripleBump => Shape::MexicanHat,
+        }
+    }
 }
 
 // Kernel and growth functions are the same, only diffrence is that, growth function x changes with
