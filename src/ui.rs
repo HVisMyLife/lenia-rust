@@ -118,7 +118,7 @@ impl UI {
     }
 
     fn input_handler(&mut self, uid: &mut String, eco: &mut Eco, logger: &mut Logger) -> bool {
-        if is_key_pressed(KeyCode::A) {self.pause = !self.pause;}
+        if is_key_pressed(KeyCode::P) {self.pause = !self.pause;}
         
         if is_key_pressed(KeyCode::S) { logger.save_to_file(); self.popup.show(&"SAVED".to_string(), None);}
         if is_key_pressed(KeyCode::L) { logger.load_from_file(); self.popup.show(&"LOADED".to_string(), None);}
@@ -213,27 +213,26 @@ impl DynamicDisplay {
             });
             self.field_max = self.parameters_lengths.iter().sum();
 
-            let mut sum = 0;
-            let mut parameter_i = 0;
-            let mut active = true;
+            // calculate cursor position, and parameter indexes
+            let mut sum: usize = 0;
             self.idx = 0;
             self.pos_y = 8.5;
-            self.parameters_lengths.iter().enumerate().for_each(|(i, l)|{
-                if active {self.idx = 0;}
-                for _ in 0..*l {
-                    if self.field > sum && active { self.idx += 1; self.pos_y += 1.;}
-                    else { active = false;}
-                    if self.field == sum {parameter_i = i;}
-                    sum += 1;
+            for i in 0..self.parameters_lengths.len() {
+                let l = self.parameters_lengths[i];
+                let l_prev = 
+                    if i > 0 {self.parameters_lengths[i-1]}
+                    else {0};
+                if sum + l > self.field as usize {
+                    self.is_kernel = i%2 == 1;
+                    self.layer_num = (i as f32 / 2. ).trunc() as usize;
+                    self.idx = (sum as isize - self.field).abs() as usize;
+                    self.pos_y += 
+                        if self.is_kernel {l_prev as f32 + 3. + self.idx as f32}
+                        else {self.idx as f32};
+                    break;
                 }
-                if active {
-                    if i&2==0 {self.pos_y += 3.;}
-                    else {self.pos_y = 8.5;}
-                }
-                // division because every two elements are from single layer 
-            });
-            self.layer_num = parameter_i / 2;
-            self.is_kernel = parameter_i % 2 == 1;
+                sum += l;
+            }
             
             // after possible layer change and after parameter change (below)
             self.kernel_shape.iter_mut().enumerate().for_each(|(i, x)| *x = 100. * eco.layers[self.layer_num].kernel.calc(i as f32/100.) );
@@ -247,6 +246,17 @@ impl DynamicDisplay {
         if is_key_pressed(KeyCode::Up) { self.field -= 1; }
         self.field = self.field.clamp(0, self.field_max as isize - 1);
 
+        // layer adder
+        if is_key_pressed(KeyCode::Insert) {
+            eco.layers.push(eco.layers[self.layer_num].clone());
+        }
+        // layer deleter
+        if is_key_pressed(KeyCode::Delete) {
+            eco.layers.remove(self.layer_num);
+            self.field = 0;
+        }
+
+        // func shape changer
         if is_key_pressed(KeyCode::PageUp) {
             self.field_old = -10;   // force refresh
             if self.is_kernel {
