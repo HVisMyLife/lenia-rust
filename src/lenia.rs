@@ -170,7 +170,7 @@ pub struct Eco {
     pub delta: f32,
     pub size: (usize, usize),
     pub cycles: usize,
-    pub fitness: f32,
+    pub fitness: f32,  // f>0.25 full; 0>f>0.1 life
 }
 
 impl Eco {
@@ -204,10 +204,11 @@ impl Eco {
         self.cycles += 1;
 
         // calculate fitness
+        self.fitness = 0.;
         self.channels.iter().for_each(|ch|{
-            self.fitness += ch.matrix_out.mean().unwrap();
+            self.fitness += ch.matrix.mean().unwrap();
         });
-        self.fitness /= self.channels.len() as f32 * 10000.;
+        //self.fitness /= self.channels.len() as f32 * 10000.;
     }
 
 }

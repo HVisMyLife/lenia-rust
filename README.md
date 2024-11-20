@@ -17,14 +17,13 @@ Controls:
  - delete - remove config or layer
  - Esc - exit
 
-Growth map function parameters and kernel radiuses are beeing saved to .toml and matrix values to .bin. 
+Layer data, like function parameters, are saved to .toml and matrix values to .bin.
+Additionally there is one correlation .toml, that have references to above files.
 
 Features ideas are greatly appreciated.
 
+![example](https://github.com/HVisMyLife/lenia-rust/blob/master/recording2.gif)
 ![example](https://github.com/HVisMyLife/lenia-rust/blob/master/recording.gif)
 
-For now, there are two kernels:
-![example](https://github.com/HVisMyLife/lenia-rust/blob/master/kernels.png)
-
-Each kernel have it's own growth mapping function, which is defined by 3 parameters:
-![example](https://github.com/HVisMyLife/lenia-rust/blob/master/growth_map.png)
+There are 5 possible function shapes, for use as kernels or growth maps (centering vertically around 0 possible via parameters):
+![example](https://github.com/HVisMyLife/lenia-rust/blob/master/functions.png)

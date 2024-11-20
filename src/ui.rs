@@ -264,6 +264,7 @@ impl DynamicDisplay {
             } else {
                 eco.layers[self.layer_num].growth_map.shape = eco.layers[self.layer_num].growth_map.shape.next();
             }
+            eco.init();  // need to regenerate kernel lookup
         }
         if is_key_pressed(KeyCode::PageDown) {
             self.field_old = -10;   // force refresh
@@ -272,6 +273,7 @@ impl DynamicDisplay {
             } else {
                 eco.layers[self.layer_num].growth_map.shape = eco.layers[self.layer_num].growth_map.shape.previous();
             }
+            eco.init();  // need to regenerate kernel lookup
         }
 
         if is_key_pressed(KeyCode::Left) || is_key_pressed(KeyCode::Right){
@@ -280,11 +282,11 @@ impl DynamicDisplay {
             if is_key_pressed(KeyCode::Left) {value = -value;}
             if self.is_kernel {
                 eco.layers[self.layer_num].kernel.parameters[self.idx] += value;
-                eco.init();  // need to regenerate kernel lookup
             }
             else {eco.layers[self.layer_num].growth_map.parameters[self.idx] += value;}
             self.kernel_shape.iter_mut().enumerate().for_each(|(i, x)| *x = 100. * eco.layers[self.layer_num].kernel.calc(i as f32/100.) );
             self.growth_map_shape.iter_mut().enumerate().for_each(|(i, x)| *x = 100. * eco.layers[self.layer_num].growth_map.calc(i as f32/100.) );
+            eco.init();  // need to regenerate kernel lookup
         } 
 
 
